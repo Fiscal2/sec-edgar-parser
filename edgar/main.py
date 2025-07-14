@@ -19,7 +19,7 @@ def convert_report(report):
 
 
 # --- Configuration ---
-tickers = ['AAPL', 'MSFT', 'GOOG']   # Add more tickers if needed
+tickers = ['AAPL', 'GOOG', 'TSLA', 'AMZN', 'JPM', 'QCOM', 'ORCL']   # Add more tickers if needed
 years = range(2022, 2023)             # Adjust year range as needed
 
 # --- Loop through companies and years ---
@@ -42,9 +42,12 @@ for ticker in tickers:
             # quarter = 0 is our convention for annual
             
             if income and balance and cash:
-                upload_to_supabase(ticker, year, 0, income, balance, cash)
-            else:
-                print(f"⚠️  Skipping upload for {ticker} {year} — missing financial data")
+                try:
+                    report_date_str = income[0]["date"]  # "31-12-2021"
+                    report_year = int(report_date_str.split("-")[2])
+                    upload_to_supabase(ticker, report_year, 0, income, balance, cash)
+                except:
+                    print(f"⚠️  Skipping upload for {ticker} {year} — missing financial data")
 
         except Exception as e:
             print(f"Failed to process {ticker} 10-K {year}: {e}")
