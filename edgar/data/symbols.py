@@ -26,16 +26,11 @@ def get_all_symbols():
     # 	'filing_url':[]
     # }
 
-    starting_year = ''
+    starting_year = '2019'
     starting_quarter = ''
     starting_filing_url = ''
 
-    try:
-        starting_year = results['year'][-1]
-        starting_quarter = results['quarter'][-1]
-        starting_filing_url = results['filing_url'][-1]
-    except:
-        print('No previous data; starting from scratch')
+    print('⏩ Starting fresh from 2020')
 
     # these have issuerTradingSymbol (https://www.sec.gov/fast-answers/answersform345htm.html)
     forms = ['3', '4', '5'] 
@@ -43,9 +38,9 @@ def get_all_symbols():
     # starts at full index, reverse to focus on most recent symbol data
     full_directory_item_list = reversed(get_index_json()['directory']['item'])
     
-    found_starting_year = True if starting_year == '' else False
-    found_starting_quarter = True if starting_quarter == '' else False
-    found_starting_filing_url = True if starting_filing_url == '' else False
+    found_starting_year = True 
+    found_starting_quarter = True 
+    found_starting_filing_url = True
 
     try:
         for directory_item in full_directory_item_list:

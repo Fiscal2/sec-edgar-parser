@@ -3,27 +3,27 @@ from uploader import upload_to_supabase
 from datetime import datetime
 import re
 import logging
+import json
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def parse_date_flexible(date_string):
-    """Parse dates with multiple format attempts"""
     if not date_string:
         return None
     date_string = date_string.strip()
 
     date_patterns = [
-        '%d-%m-%Y',
-        '%Y-%m-%d',
-        '%m/%d/%Y',
+        '%d-%m-%Y', 
+        '%Y-%m-%d', 
+        '%m/%d/%Y', 
         '%d/%m/%Y',
-        '%B %d, %Y',
-        '%b %d, %Y',
+        '%B %d, %Y', 
+        '%b %d, %Y', 
         '%b. %d, %Y',
-        '%d %b %Y',
-        '%d %B %Y',
+        '%d %b %Y', 
+        '%d %B %Y'
     ]
 
     for pattern in date_patterns:
@@ -36,7 +36,6 @@ def parse_date_flexible(date_string):
     return None
 
 def convert_report(report):
-    """Convert financial data to clean, serializable form"""
     def convert(obj):
         if isinstance(obj, list):
             return [convert(item) for item in obj]
@@ -45,11 +44,7 @@ def convert_report(report):
             for k, v in obj.items():
                 if k == "date" and isinstance(v, str):
                     parsed_date = parse_date_flexible(v)
-                    if parsed_date:
-                        converted[k] = parsed_date.strftime("%d-%m-%Y")
-                    else:
-                        converted[k] = v
-                        logger.warning(f"Could not parse date '{v}', keeping original format")
+                    converted[k] = parsed_date.strftime("%d-%m-%Y") if parsed_date else v
                 else:
                     converted[k] = convert(v)
             return converted
@@ -62,92 +57,160 @@ def convert_report(report):
     return convert(report)
 
 def validate_financial_data(data, data_type, ticker):
-    if not data:
-        logger.warning(f"No {data_type} data found for {ticker}")
-        return False
-    if not isinstance(data, list):
-        logger.warning(f"{data_type} data is not a list for {ticker}")
-        return False
-    if len(data) == 0:
-        logger.warning(f"{data_type} data is empty list for {ticker}")
-        return False
-    if not isinstance(data[0], dict):
-        logger.warning(f"First {data_type} item is not a dict for {ticker}")
-        return False
-    if "date" not in data[0]:
-        logger.warning(f"No date field in {data_type} data for {ticker}")
+    if not data or not isinstance(data, list) or not isinstance(data[0], dict) or "date" not in data[0]:
+        logger.warning(f"{data_type} data invalid or missing for {ticker}")
         return False
     return True
 
-def extract_financial_data(filing, ticker, year):
+def validate_revenue_breakdown(revenue_data, ticker):
+    """
+    Improved validation for revenue breakdown data
+    """
+    if not revenue_data or not isinstance(revenue_data, dict):
+        logger.warning(f"Revenue breakdown data invalid or missing for {ticker}")
+        return False
+    
+    # More lenient validation - accept if we have any revenue data
+    has_breakdown = bool(revenue_data.get('revenue_breakdown'))
+    has_sources = bool(revenue_data.get('revenue_sources'))
+    extraction_method = revenue_data.get('extraction_method', 'unknown')
+    confidence_score = revenue_data.get('confidence_score', 0)
+    
+    logger.info(f"Revenue validation for {ticker}: breakdown={has_breakdown}, sources={has_sources}, method={extraction_method}, confidence={confidence_score}")
+    
+    # Accept if we have either breakdown or sources, or if confidence > 0
+    if has_breakdown or has_sources or confidence_score > 0:
+        return True
+    
+    logger.warning(f"No meaningful revenue breakdown found for {ticker}")
+    return False
+
+def create_fallback_revenue_data(ticker):
+    """
+    Create fallback revenue data structure when extraction fails
+    """
+    return {
+        'total_revenue': None,
+        'revenue_breakdown': {},
+        'revenue_sources': [],
+        'extraction_method': 'fallback',
+        'confidence_score': 0.0,
+        'error': 'No revenue breakdown extracted'
+    }
+
+def extract_financial_data(filing, ticker, *years):
+    def filter_reports_by_years(reports, valid_years):
+        return [
+            r for r in reports
+            if parse_date_flexible(r.get("date", "")).year in valid_years
+        ]
+
     try:
-        logger.info(f"Extracting income statements for {ticker} {year}")
+        logger.info(f"Checking reports for {ticker} in years: {years}")
+
+        # Extract traditional financial statements
         income = convert_report(filing.get_income_statements())
-        income_reports = income["reports"]
+        income_reports = filter_reports_by_years(income["reports"], years)
 
-        logger.info(f"Extracting balance sheets for {ticker} {year}")
         balance = convert_report(filing.get_balance_sheets())
-        balance_reports = balance["reports"]
+        balance_reports = filter_reports_by_years(balance["reports"], years)
 
-        logger.info(f"Extracting cash flows for {ticker} {year}")
         cash = convert_report(filing.get_cash_flows())
-        cash_reports = cash["reports"]
+        cash_reports = filter_reports_by_years(cash["reports"], years)
 
-        logger.info(f"Extracted data counts - Income: {len(income_reports)}, Balance: {len(balance_reports)}, Cash: {len(cash_reports)}")
+        # Extract revenue breakdown with better error handling
+        logger.info(f"Extracting revenue breakdown for {ticker}")
+        try:
+            revenue_breakdown = filing.get_revenue_breakdown()
+            logger.info(f"Raw revenue breakdown result: {json.dumps(revenue_breakdown, indent=2, default=str)}")
+        except Exception as e:
+            logger.error(f"Error extracting revenue breakdown: {e}")
+            revenue_breakdown = create_fallback_revenue_data(ticker)
+        
+        # Ensure revenue_breakdown is not None
+        if revenue_breakdown is None:
+            logger.warning(f"Revenue breakdown is None for {ticker}, using fallback")
+            revenue_breakdown = create_fallback_revenue_data(ticker)
+        
+        logger.info(
+            f"Filtered data counts for years {years} — "
+            f"Income: {len(income_reports)}, Balance: {len(balance_reports)}, "
+            f"Cash: {len(cash_reports)}, Revenue breakdown confidence: {revenue_breakdown.get('confidence_score', 0)}"
+        )
 
         income_valid = validate_financial_data(income_reports, "income", ticker)
         balance_valid = validate_financial_data(balance_reports, "balance", ticker)
         cash_valid = validate_financial_data(cash_reports, "cash", ticker)
+        
+        # Always proceed with revenue data, even if validation fails
+        # The upload function should handle empty/fallback data gracefully
+        
+        if income_valid and balance_valid and cash_valid:
+            return income_reports, balance_reports, cash_reports, revenue_breakdown, max(years)
 
-        if not (income_valid and balance_valid and cash_valid):
-            logger.error(f"Data validation failed for {ticker} {year}")
-            return None, None, None
-
-        return income_reports, balance_reports, cash_reports
+        logger.error(f"No valid reports found for {ticker} in {years}")
+        return None, None, None, None, None
 
     except Exception as e:
-        logger.error(f"Error extracting financial data for {ticker} {year}: {e}")
-        return None, None, None
+        logger.error(f"Error extracting financial data for {ticker} {years}: {e}")
+        return None, None, None, None, None
 
-def process_company_filing(ticker, year):
-    logger.info(f"Processing {ticker} 10-K for {year}")
+def process_company_filing(ticker, target_year):
+    logger.info(f"Processing {ticker} 10-K targeting report year {target_year}")
     try:
         stock = Stock(ticker)
-        filing = stock.get_filing('annual', year, 4)
 
-        if not filing:
-            logger.warning(f"No 10-K found for {ticker} {year}")
-            return False
+        # Try filing years: [target_year, target_year + 1]
+        for filing_year in [target_year, target_year + 1]:
+            filing = stock.get_filing('annual', filing_year, 4)
 
-        income, balance, cash = extract_financial_data(filing, ticker, year)
+            if not filing:
+                logger.warning(f"No 10-K filed in {filing_year} for {ticker}")
+                continue
 
-        if not (income and balance and cash):
-            logger.error(f"Failed to extract complete financial data for {ticker} {year}")
-            return False
+            # Try to extract reports *containing* the target report year
+            income, balance, cash, revenue_breakdown, report_year = extract_financial_data(filing, ticker, target_year)
 
-        report_date_str = income[0].get("date")
-        if not report_date_str:
-            logger.error(f"Missing date in income statement for {ticker} {year}")
-            return False
+            if income and balance and cash:
+                logger.info(f"📦 Uploading {ticker} 10-K with report year {report_year} (filed in {filing_year})")
 
-        parsed_date = parse_date_flexible(report_date_str)
-        if not parsed_date:
-            logger.error(f"Could not parse date '{report_date_str}' for {ticker} {year}")
-            return False
+                # Enhanced logging for revenue breakdown
+                if revenue_breakdown:
+                    logger.info(f"Revenue breakdown keys: {list(revenue_breakdown.keys())}")
+                    logger.info(f"Extraction method: {revenue_breakdown.get('extraction_method', 'unknown')}")
+                    logger.info(f"Confidence score: {revenue_breakdown.get('confidence_score', 0)}")
+                    
+                    if revenue_breakdown.get('revenue_breakdown'):
+                        logger.info(f"Revenue breakdown categories: {len(revenue_breakdown['revenue_breakdown'])}")
+                        # Log the actual breakdown data
+                        for key, value in list(revenue_breakdown['revenue_breakdown'].items())[:5]:
+                            logger.info(f"  {key}: {value}")
+                    
+                    if revenue_breakdown.get('revenue_sources'):
+                        logger.info(f"Revenue sources: {len(revenue_breakdown['revenue_sources'])}")
+                        # Log some sample revenue sources with correct key
+                        for source in list(revenue_breakdown.get('revenue_sources', []))[:3]:
+                            logger.info(f"  - {source.get('description', 'Unknown')}: {source.get('amount', 'N/A')}")
+                    
+                    # Log any errors
+                    if revenue_breakdown.get('error'):
+                        logger.warning(f"Revenue extraction error: {revenue_breakdown['error']}")
+                else:
+                    logger.warning(f"No revenue breakdown data for {ticker}")
 
-        report_year = parsed_date.year
-        logger.info(f"📦 Uploading {ticker} 10-K for report year {report_year} (filed in {year})")
+                # Always attempt upload, even with empty/fallback revenue data
+                return upload_to_supabase(ticker, report_year, 0, income, balance, cash, revenue_breakdown)
 
-        upload_success = upload_to_supabase(ticker, report_year, 0, income, balance, cash)
-        return upload_success
+        logger.error(f"No 10-K with report year {target_year} found for {ticker}")
+        return False
 
     except Exception as e:
-        logger.error(f"Failed to process {ticker} 10-K {year}: {e}")
+        logger.error(f"Failed to process {ticker} targeting {target_year}: {e}", exc_info=True)
         return False
 
 def main():
-    tickers = ['AAPL', 'GOOG', 'AMZN', 'JPM', 'QCOM']
-    years = [2022]
+    tickers = ['AAPL']
+    years = [2024]
 
     results = {
         'successful': [],

@@ -5,7 +5,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def upload_to_supabase(ticker, year, quarter, income, balance, cash):
+def upload_to_supabase(ticker, year, quarter, income, balance, cash, revenue_breakdown):
     """
     Upload financial data to Supabase with comprehensive error handling
     
@@ -37,6 +37,8 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash):
             json.dumps(income)
             json.dumps(balance)
             json.dumps(cash)
+            if revenue_breakdown:
+                json.dumps(revenue_breakdown)
         except (TypeError, ValueError) as e:
             logger.error(f"Data serialization error for {ticker} {year} Q{quarter}: {e}")
             return False
@@ -49,12 +51,40 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash):
             "income_statement": json.dumps(income),
             "balance_sheet": json.dumps(balance),
             "cash_flow": json.dumps(cash),
+            "revenue_breakdown": json.dumps(revenue_breakdown)
         }
-        
+
+        # Extract total revenue from income statement
+        total_revenue = None
+        if income and len(income) > 0:
+            for item in income:
+                if item.get('date') and str(year) in item.get('date'):
+                    map_data = item.get('map', {})
+                    revenue_labels = ['total revenue', 'net sales', 'total net sales', 'revenue', 'total revenues', 'consolidated revenue']
+                    for label in revenue_labels:
+                        if label in map_data:
+                            total_revenue = map_data[label].get('value')
+                            if total_revenue is not None:
+                                logger.info(f"Extracted total revenue from income statement: {total_revenue} for {year}")
+                                break
+                    if total_revenue is not None:
+                        break
+
+
+        rb = revenue_breakdown.get("revenue_breakdown") if revenue_breakdown else None
+        if isinstance(rb, dict) and len(rb) > 0:
+            category_count = len(rb)
+            logger.info(f"Including revenue breakdown with {category_count} categories")
+            payload["revenue_breakdown"] = json.dumps(revenue_breakdown)
+        else:
+            logger.warning("Revenue breakdown is missing or empty")
+            payload["revenue_breakdown"] = None
+
         # Log data sizes for debugging
         logger.info(f"Payload sizes - Income: {len(payload['income_statement'])}, "
                    f"Balance: {len(payload['balance_sheet'])}, "
-                   f"Cash: {len(payload['cash_flow'])}")
+                   f"Cash: {len(payload['cash_flow'])}, "
+                   f"Revenue breakdown: {len(payload.get('revenue_breakdown', '') or '')}")
         
         # Upload to Supabase
         logger.info(f"Uploading {ticker} Q{quarter} {year} to Supabase...")
@@ -69,6 +99,19 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash):
                 sample_income = income[0]
                 logger.info(f"Sample income data: date={sample_income.get('date')}, "
                            f"fields={len(sample_income.get('map', {}))}")
+
+                
+            # Log revenue breakdown summary
+            rb = revenue_breakdown.get("revenue_breakdown") if revenue_breakdown else None
+            if isinstance(rb, dict) and len(rb) > 0:
+                logger.info(f"Revenue breakdown summary:")
+                logger.info(f"  - Method: {revenue_breakdown.get('extraction_method', 'unknown')}")
+                logger.info(f"  - Confidence: {revenue_breakdown.get('confidence_score', 0)}")
+                logger.info(f"  - Categories: {len(revenue_breakdown.get('revenue_breakdown', {}))}")
+                
+                # Show top 3 revenue sources
+                for i, source in enumerate(revenue_breakdown.get('revenue_sources', [])[:3]):
+                    logger.info(f"  - Source {i+1}: {source.get('description', 'Unknown')}")
             
             time.sleep(1 / 9)  # Rate limiting
             return True
@@ -134,7 +177,56 @@ def validate_financial_data_structure(data, data_type):
     
     return True
 
-def upload_to_supabase_with_validation(ticker, year, quarter, income, balance, cash):
+def validate_revenue_breakdown_structure(revenue_data):
+    """
+    Validate the structure of revenue breakdown data
+    
+    Args:
+        revenue_data: Revenue breakdown data to validate
+    
+    Returns:
+        bool: True if valid, False otherwise
+    """
+    if not isinstance(revenue_data, dict):
+        logger.error("Revenue breakdown data is not a dictionary")
+        return False
+    
+    required_fields = ['revenue_breakdown', 'revenue_sources', 'extraction_method', 'confidence_score']
+    for field in required_fields:
+        if field not in revenue_data:
+            logger.warning(f"Missing field '{field}' in revenue breakdown data")
+    
+    # Check revenue_breakdown structure
+    if 'revenue_breakdown' in revenue_data and not isinstance(revenue_data['revenue_breakdown'], dict):
+        logger.error("'revenue_breakdown' field is not a dictionary")
+        return False
+    
+    # Check revenue_sources structure
+    if 'revenue_sources' in revenue_data:
+        if not isinstance(revenue_data['revenue_sources'], list):
+            logger.error("'revenue_sources' field is not a list")
+            return False
+        
+        for i, source in enumerate(revenue_data['revenue_sources']):
+            if not isinstance(source, dict):
+                logger.error(f"Revenue source {i} is not a dictionary")
+                return False
+            
+            if 'description' not in source:
+                logger.warning(f"Revenue source {i} missing description")
+    
+    # Check confidence score
+    if 'confidence_score' in revenue_data:
+        try:
+            score = float(revenue_data['confidence_score'])
+            if not (0.0 <= score <= 1.0):
+                logger.warning(f"Confidence score {score} is not between 0.0 and 1.0")
+        except (ValueError, TypeError):
+            logger.warning("Confidence score is not a valid number")
+    
+    return True
+
+def upload_to_supabase_with_validation(ticker, year, quarter, income, balance, cash, revenue_breakdown):
     """
     Enhanced upload function with data validation
     
@@ -149,8 +241,13 @@ def upload_to_supabase_with_validation(ticker, year, quarter, income, balance, c
     if not validate_financial_data_structure(cash, 'cash'):
         return False
     
+    # # Validate revenue breakdown if provided
+    # if revenue_breakdown and not validate_revenue_breakdown_structure(revenue_breakdown):
+    #     logger.warning("Revenue breakdown validation failed, proceeding without it")
+    #     revenue_breakdown = None
+
     # Proceed with upload
-    return upload_to_supabase(ticker, year, quarter, income, balance, cash)
+    return upload_to_supabase(ticker, year, quarter, income, balance, cash, revenue_breakdown)
 
 def get_existing_data(ticker, year, quarter):
     """
@@ -175,7 +272,7 @@ def get_existing_data(ticker, year, quarter):
         logger.error(f"Error fetching existing data for {ticker} {year} Q{quarter}: {e}")
         return None
 
-def update_existing_data(ticker, year, quarter, income, balance, cash):
+def update_existing_data(ticker, year, quarter, income, balance, cash, revenue_breakdown=None):
     """
     Update existing financial data in Supabase
     
@@ -188,6 +285,10 @@ def update_existing_data(ticker, year, quarter, income, balance, cash):
             "balance_sheet": json.dumps(balance),
             "cash_flow": json.dumps(cash),
         }
+
+        # Add revenue breakdown if available
+        if revenue_breakdown:
+            payload["revenue_breakdown"] = json.dumps(revenue_breakdown)
         
         result = supabase.table("financials") \
             .update(payload) \
@@ -206,3 +307,45 @@ def update_existing_data(ticker, year, quarter, income, balance, cash):
     except Exception as e:
         logger.error(f"❌ Error updating {ticker} Q{quarter} {year}: {e}")
         return False
+
+def get_revenue_breakdown_summary(ticker, year, quarter):
+    """
+    Get a summary of revenue breakdown for a specific company/year/quarter
+    
+    Returns:
+        dict: Summary of revenue breakdown data
+    """
+    try:
+        result = supabase.table("financials") \
+            .select("revenue_breakdown") \
+            .eq("ticker", ticker) \
+            .eq("year", year) \
+            .eq("quarter", quarter) \
+            .execute()
+        
+        if result.data and len(result.data) > 0:
+            revenue_data = result.data[0].get('revenue_breakdown')
+            if revenue_data:
+                try:
+                    parsed_data = json.loads(revenue_data)
+                    return {
+                        'ticker': ticker,
+                        'year': year,
+                        'quarter': quarter,
+                        'extraction_method': parsed_data.get('extraction_method', 'unknown'),
+                        'confidence_score': parsed_data.get('confidence_score', 0),
+                        'revenue_categories': len(parsed_data.get('revenue_breakdown', {})),
+                        'revenue_sources': len(parsed_data.get('revenue_sources', [])),
+                        'top_revenue_sources': [
+                            source.get('description', 'Unknown') 
+                            for source in parsed_data.get('revenue_sources', [])[:5]
+                        ]
+                    }
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse revenue breakdown JSON for {ticker} {year} Q{quarter}")
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting revenue breakdown summary for {ticker} {year} Q{quarter}: {e}")
+        return None
