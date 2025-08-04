@@ -113,6 +113,9 @@ def process_company_filing(ticker, target_year):
         # Try filing years: [target_year, target_year + 1]
         for filing_year in [target_year, target_year + 1]:
             filing = stock.get_filing('annual', filing_year, 4)
+            company_name = filing.extract_company_name()
+            logger.info(f"Extracted company name: {company_name}")
+
 
             if not filing:
                 logger.warning(f"No 10-K filed in {filing_year} for {ticker}")
@@ -125,7 +128,7 @@ def process_company_filing(ticker, target_year):
                 logger.info(f"📦 Uploading {ticker} 10-K with report year {report_year} (filed in {filing_year})")
 
                 # Always attempt upload, even with empty/fallback revenue data
-                return upload_to_supabase(ticker, report_year, 0, income, balance, cash)
+                return upload_to_supabase(ticker, report_year, 0, income, balance, cash, company_name)
 
         logger.error(f"No 10-K with report year {target_year} found for {ticker}")
         return False
@@ -135,8 +138,8 @@ def process_company_filing(ticker, target_year):
         return False
 
 def main():
-    tickers = ['HD']
-    years = [2023,2022,2021]
+    tickers = ['AAPL']
+    years = [2024,2023]
 
     results = {
         'successful': [],

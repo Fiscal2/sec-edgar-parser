@@ -4,7 +4,9 @@ Logic related to the handling of filings and documents
 # import csv
 # import re
 # import os
+import re
 from bs4 import BeautifulSoup
+import requests
 from edgar.requests_wrapper import GetRequest
 from edgar.document import Document
 from edgar.sgml import Sgml
@@ -38,7 +40,7 @@ class Statements:
                     'condensed statements of income',
                     'condensed statements of operations',
                     'condensed statements of operations and comprehensive loss',
-                    'consolidated statements of comprehensive income'
+                    'consolidated statements of comprehensive income', 
                     ]
     balance_sheets = ['consolidated balance sheets',
                     'consolidated balance sheets',
@@ -188,6 +190,32 @@ class Filing:
                 
         print(f'could not find anything for ShortName {report_short_name.lower()}')
         return None
+    
+    def extract_company_name(self):
+        try:
+            logger.info(f"Fetching SGML from: {self.url}")
+            res = GetRequest(self.url).response
+            if res.status_code != 200:
+                logger.error(f"Failed to fetch SGML: {res.status_code}")
+                return None
+
+            for line in res.text.splitlines():
+                if "COMPANY CONFORMED NAME:" in line:
+                    name = line.split("COMPANY CONFORMED NAME:")[1].strip()
+                    logger.info(f"Extracted company name: {name}")
+                    # Remove trailing "\XX" state code if present
+                    name = re.sub(r'\\[A-Z]{2}\\?$', '', name)
+
+                    logger.info(f"Cleaned company name: {name}")
+                    return name
+                
+
+            logger.warning("COMPANY CONFORMED NAME not found.")
+            return None
+        except Exception as e:
+            logger.error(f"Error extracting company name from SGML: {e}")
+            return None
+
 
 
 

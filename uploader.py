@@ -1,3 +1,4 @@
+import requests
 from supabase_client import supabase
 import json
 import time
@@ -5,7 +6,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def upload_to_supabase(ticker, year, quarter, income, balance, cash):
+from bs4 import BeautifulSoup
+import requests
+
+
+def upload_to_supabase(ticker, year, quarter, income, balance, cash, company_name=None):
     """
     Upload financial data to Supabase with comprehensive error handling
     
@@ -28,8 +33,13 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash):
             .execute()
         
         if existing.data and len(existing.data) > 0:
-            logger.info(f"⏩ Skipping {ticker} Q{quarter} {year} — already in Supabase.")
-            return True  # Consider this a success since data already exists
+            existing_company_name = existing.data[0].get("company_name")
+        if existing_company_name:
+            logger.info(f"Skipping {ticker} Q{quarter} {year} — already in Supabase with company name.")
+            return True
+        else:
+            logger.info(f"Existing record missing company name — will update.")
+
         
         # Validate data structure before JSON conversion
         try:
@@ -50,6 +60,9 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash):
             "balance_sheet": json.dumps(balance),
             "cash_flow": json.dumps(cash),
         }
+
+        if company_name:
+            payload["company_name"] = company_name
 
         # Extract total revenue from income statement
         total_revenue = None
@@ -75,7 +88,7 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash):
         
         # Upload to Supabase
         logger.info(f"Uploading {ticker} Q{quarter} {year} to Supabase...")
-        result = supabase.table("financials").insert(payload).execute()
+        result = supabase.table("financials").upsert(payload, on_conflict="ticker,year,quarter").execute()
         
         # Check result
         if result.data:
@@ -152,56 +165,7 @@ def validate_financial_data_structure(data, data_type):
     
     return True
 
-def validate_revenue_breakdown_structure(revenue_data):
-    """
-    Validate the structure of revenue breakdown data
-    
-    Args:
-        revenue_data: Revenue breakdown data to validate
-    
-    Returns:
-        bool: True if valid, False otherwise
-    """
-    if not isinstance(revenue_data, dict):
-        logger.error("Revenue breakdown data is not a dictionary")
-        return False
-    
-    required_fields = ['revenue_breakdown', 'revenue_sources', 'extraction_method', 'confidence_score']
-    for field in required_fields:
-        if field not in revenue_data:
-            logger.warning(f"Missing field '{field}' in revenue breakdown data")
-    
-    # Check revenue_breakdown structure
-    if 'revenue_breakdown' in revenue_data and not isinstance(revenue_data['revenue_breakdown'], dict):
-        logger.error("'revenue_breakdown' field is not a dictionary")
-        return False
-    
-    # Check revenue_sources structure
-    if 'revenue_sources' in revenue_data:
-        if not isinstance(revenue_data['revenue_sources'], list):
-            logger.error("'revenue_sources' field is not a list")
-            return False
-        
-        for i, source in enumerate(revenue_data['revenue_sources']):
-            if not isinstance(source, dict):
-                logger.error(f"Revenue source {i} is not a dictionary")
-                return False
-            
-            if 'description' not in source:
-                logger.warning(f"Revenue source {i} missing description")
-    
-    # Check confidence score
-    if 'confidence_score' in revenue_data:
-        try:
-            score = float(revenue_data['confidence_score'])
-            if not (0.0 <= score <= 1.0):
-                logger.warning(f"Confidence score {score} is not between 0.0 and 1.0")
-        except (ValueError, TypeError):
-            logger.warning("Confidence score is not a valid number")
-    
-    return True
-
-def upload_to_supabase_with_validation(ticker, year, quarter, income, balance, cash, revenue_breakdown):
+def upload_to_supabase_with_validation(ticker, year, quarter, income, balance, cash, company_name):
     """
     Enhanced upload function with data validation
     
@@ -215,14 +179,8 @@ def upload_to_supabase_with_validation(ticker, year, quarter, income, balance, c
         return False
     if not validate_financial_data_structure(cash, 'cash'):
         return False
-    
-    # # Validate revenue breakdown if provided
-    # if revenue_breakdown and not validate_revenue_breakdown_structure(revenue_breakdown):
-    #     logger.warning("Revenue breakdown validation failed, proceeding without it")
-    #     revenue_breakdown = None
-
     # Proceed with upload
-    return upload_to_supabase(ticker, year, quarter, income, balance, cash, revenue_breakdown)
+    return upload_to_supabase(ticker, year, quarter, income, balance, cash, company_name)
 
 def get_existing_data(ticker, year, quarter):
     """
