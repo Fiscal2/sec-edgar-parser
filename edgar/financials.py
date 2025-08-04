@@ -5,6 +5,7 @@ import re
 from bs4 import BeautifulSoup
 from json import JSONEncoder
 from datetime import datetime
+from dateutil.parser import parse as parse_date
 
 class FinancialReportEncoder(JSONEncoder):
         
@@ -156,18 +157,11 @@ def _process_financial_info(financial_html_text):
         xbrl_element = None
         label = None
         numeric_data_available = False
+        value_index = 0
 
-        for index, info in enumerate(data):
+        for info in data:
             info_text = info.get_text().strip()
-
-            class_list = None
-            try:
-                # handle cases where the row is just a separator or something
-                class_list = info.attrs['class']
-            except KeyError as e:
-                # print('KeyError {} from below table data, moving along'.format(e))
-                # print(info)
-                continue
+            class_list = info.get('class', [])
 
             processed_financial_value = None
 
@@ -192,22 +186,18 @@ def _process_financial_info(financial_html_text):
 
             if processed_financial_value is not None:
                 # print(index)
-                if index-1 not in range(len(financial_info)):
-                    print('index-1 {} is too big to capture {}'.format(index-1, processed_financial_value))
-                financial_info_map = financial_info[index-1].map
+                if value_index >= len(financial_info):
+                    print(f"[WARN] Skipping value at index {value_index} — exceeds financial_info length {len(financial_info)}")
+                else:
+                    financial_info_map = financial_info[value_index].map
+                    if xbrl_element and xbrl_element not in financial_info_map:
+                        # handles adjustment details
+                        # e.g. https://www.sec.gov/Archives/edgar/data/867773/0000867773-18-000082.txt
+                        financial_info_map[xbrl_element] = FinancialElement(label, processed_financial_value)
+                value_index += 1  # advance only when we store a value
 
-                if xbrl_element not in financial_info_map:
-                    # handles adjustment details
-                    # e.g. https://www.sec.gov/Archives/edgar/data/867773/0000867773-18-000082.txt
-                    financial_info_map[xbrl_element] = FinancialElement(label, processed_financial_value)
-
-
-    # clean reports
-    # colspans sometimes cause duplicate reports with empty maps
-    for fi in financial_info:
-        if not fi.map:
-            financial_info.remove(fi)
-
+    # Remove empty reports
+    financial_info = [fi for fi in financial_info if fi.map]
     return financial_info
 
 
@@ -229,67 +219,52 @@ def _get_statement_meta_data(rows):
     is_snapshot = False
 
     title_repeat = 0
+    found_dates = []
 
-    # all the meta data we need is in the first two tables rows
-    for row_num, row in enumerate(rows[:2]):
-        # meta data comes from the table headers
-        data = row.find_all('th')
+    # Combine the first two rows of headers
+    header_rows = rows[:2]
+    header_text = []
 
+    for row in header_rows:
+        cells = row.find_all(['th', 'td'])
+        header_text.append([cell.get_text(strip=True) for cell in cells])
 
-        for index, info in enumerate(data):
-            info_text = info.get_text().replace('\n', '')
+    flat_text = [cell for row in header_text for cell in row]
 
-            class_list = info.attrs['class']
-            
-            repeat = 1 if 'colspan' not in info.attrs else int(info.attrs['colspan'])
+    # Look for unit_text like "shares in Thousands, $ in Millions"
+    for text in flat_text:
+        if "shares in" in text.lower() or "$ in" in text.lower():
+            unit_text = text
+            break
 
-            if row_num == 0:
+    # Look for column headers with recognizable dates or period phrases
+    for text in flat_text:
+        text_lower = text.lower()
+        try:
+            if "ended" in text_lower or "as of" in text_lower:
+                # Try to extract month count from text
+                months = None
+                m = re.search(r"(\d+)\s+month", text_lower)
+                if m:
+                    months = int(m.group(1))
+                period_units.append(months if months else 12)  # Default to 12
+            elif re.search(r'\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b', text_lower):
+                # Likely a date
+                dt = parse_date(text, fuzzy=True).strftime("%b. %d, %Y")
+                found_dates.append(dt)
+        except Exception:
+            continue
 
-                if 'tl' in class_list:
-                    # first col is for xbrl_element, so we're concerned if it has a colspan greater than 1
-                    # so that we can determine our table structure
-                    title_repeat = 0 if 'colspan' not in info.attrs or int(info.attrs['colspan']) == 1 else int(info.attrs['colspan']) - 1
-                    # first th with tl class has title and unit specification
-                    info_list = info.find('div').get_text('|', strip=True).split('|')
-                    # e.g. shares in Thousands, $ in Millions
-                    unit_text = info_list[1]
-                    # e.g. CONSOLIDATED STATEMENTS OF INCOME - USD ($)
-                    title = info_text.replace(unit_text, '').strip()
-
-                    # Not yet using Statements.balance_sheets from filing.py because not sure
-                    # if we can assume that the FilingSummary names will be consistent with the 
-                    # title
-                    if 'balance' in title.lower() or 'statement of financial position' in title.lower():
-                        is_snapshot = True
-
-                elif 'th' in class_list:
-                    # Period unit of measurement (e.g. 12 Months Ended)
-                    # Balance sheets are a snapshot, so no period
-                    if index == 1:
-                        # repeat just the first one to cover the excess title colspan
-                        # use index 1 because 0 is title
-                        repeat += title_repeat
-
-                    for i in range(repeat):
-                        if is_snapshot:
-                            period_units.append(None)
-                            dates.append(info_text)
-                        else:
-                            period_units.append(_process_period(info_text))
-
-
-            elif row_num == 1 and 'th' in class_list:
-                # second row indicates dates of data to come
-                if index == 0:
-                    # repeat just the first one to cover the excess title colspan
-                    repeat += title_repeat
-
-                for i in range(repeat):
-                    dates.append(info_text)
-
+    # If we found dates, pair them with the periods
+    if found_dates:
+        dates = found_dates
+        if len(period_units) < len(dates):
+            period_units = [12] * len(dates)
+    else:
+        raise MetaDataParsingException("No recognizable dates found in header rows.")
 
     if len(dates) != len(period_units):
-        raise MetaDataParsingException('Potential parsing bug: len dates {} != len period_units {}'.format(dates, period_units))
+        raise MetaDataParsingException(f"Mismatch in dates and period_units: {len(dates)} vs {len(period_units)}")
 
     return dates, period_units, unit_text
 

@@ -5,7 +5,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def upload_to_supabase(ticker, year, quarter, income, balance, cash, revenue_breakdown):
+def upload_to_supabase(ticker, year, quarter, income, balance, cash):
     """
     Upload financial data to Supabase with comprehensive error handling
     
@@ -37,8 +37,6 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash, revenue_bre
             json.dumps(income)
             json.dumps(balance)
             json.dumps(cash)
-            if revenue_breakdown:
-                json.dumps(revenue_breakdown)
         except (TypeError, ValueError) as e:
             logger.error(f"Data serialization error for {ticker} {year} Q{quarter}: {e}")
             return False
@@ -51,7 +49,6 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash, revenue_bre
             "income_statement": json.dumps(income),
             "balance_sheet": json.dumps(balance),
             "cash_flow": json.dumps(cash),
-            "revenue_breakdown": json.dumps(revenue_breakdown)
         }
 
         # Extract total revenue from income statement
@@ -71,20 +68,10 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash, revenue_bre
                         break
 
 
-        rb = revenue_breakdown.get("revenue_breakdown") if revenue_breakdown else None
-        if isinstance(rb, dict) and len(rb) > 0:
-            category_count = len(rb)
-            logger.info(f"Including revenue breakdown with {category_count} categories")
-            payload["revenue_breakdown"] = json.dumps(revenue_breakdown)
-        else:
-            logger.warning("Revenue breakdown is missing or empty")
-            payload["revenue_breakdown"] = None
-
         # Log data sizes for debugging
         logger.info(f"Payload sizes - Income: {len(payload['income_statement'])}, "
                    f"Balance: {len(payload['balance_sheet'])}, "
-                   f"Cash: {len(payload['cash_flow'])}, "
-                   f"Revenue breakdown: {len(payload.get('revenue_breakdown', '') or '')}")
+                   f"Cash: {len(payload['cash_flow'])}, ")
         
         # Upload to Supabase
         logger.info(f"Uploading {ticker} Q{quarter} {year} to Supabase...")
@@ -100,18 +87,6 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash, revenue_bre
                 logger.info(f"Sample income data: date={sample_income.get('date')}, "
                            f"fields={len(sample_income.get('map', {}))}")
 
-                
-            # Log revenue breakdown summary
-            rb = revenue_breakdown.get("revenue_breakdown") if revenue_breakdown else None
-            if isinstance(rb, dict) and len(rb) > 0:
-                logger.info(f"Revenue breakdown summary:")
-                logger.info(f"  - Method: {revenue_breakdown.get('extraction_method', 'unknown')}")
-                logger.info(f"  - Confidence: {revenue_breakdown.get('confidence_score', 0)}")
-                logger.info(f"  - Categories: {len(revenue_breakdown.get('revenue_breakdown', {}))}")
-                
-                # Show top 3 revenue sources
-                for i, source in enumerate(revenue_breakdown.get('revenue_sources', [])[:3]):
-                    logger.info(f"  - Source {i+1}: {source.get('description', 'Unknown')}")
             
             time.sleep(1 / 9)  # Rate limiting
             return True

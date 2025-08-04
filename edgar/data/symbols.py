@@ -26,7 +26,7 @@ def get_all_symbols():
     # 	'filing_url':[]
     # }
 
-    starting_year = '2019'
+    starting_year = '2020'
     starting_quarter = ''
     starting_filing_url = ''
 
