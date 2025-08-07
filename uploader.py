@@ -25,6 +25,7 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash, company_nam
         
         # Check for duplicates
         logger.info(f"Checking for existing data: {ticker} {year} Q{quarter}")
+        existing_company_name = None
         existing = supabase.table("financials") \
             .select("id") \
             .eq("ticker", ticker) \

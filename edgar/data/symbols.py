@@ -26,11 +26,11 @@ def get_all_symbols():
     # 	'filing_url':[]
     # }
 
-    starting_year = '2020'
+    starting_year = '2025'
     starting_quarter = ''
     starting_filing_url = ''
 
-    print('⏩ Starting fresh from 2020')
+    print('⏩ Starting fresh from 2025')
 
     # these have issuerTradingSymbol (https://www.sec.gov/fast-answers/answersform345htm.html)
     forms = ['3', '4', '5'] 

@@ -135,14 +135,16 @@ def get_financial_report(company, date_filed, financial_html_text):
 def _process_financial_info(financial_html_text):
     '''
     Return a list of FinancialInfo objects from html-structured financial data
-    
+
     :param financial_html_text: html-structured financial data from an annual
         or quarterly Edgar filing
     '''
     source_soup = BeautifulSoup(financial_html_text, 'html.parser')
-    report = source_soup.find('table', {'class':'report'})
-    rows = report.find_all('tr')
+    report = source_soup.find('table', {'class': 'report'})
+    if report is None:
+        return []
 
+    rows = report.find_all('tr')
     financial_info = []
 
     dates, period_units, unit_text = _get_statement_meta_data(rows)
@@ -151,49 +153,74 @@ def _process_financial_info(financial_html_text):
         dt = datetime.strptime(date, '%b. %d, %Y')
         financial_info.append(FinancialInfo(dt, period_units[i], {}))
 
-    for row_num, row in enumerate(rows):
+    # find the first row that actually contains numeric data,
+    # instead of assuming it's always rows[2:]
+    start_idx = next(
+        (i for i, row in enumerate(rows)
+         if row.find('td', class_='nump') or row.find('td', class_='num')),
+        2
+    )
+
+    for row in rows[start_idx:]:
         data = row.find_all('td')
+        if not data:
+            continue
 
         xbrl_element = None
         label = None
         numeric_data_available = False
         value_index = 0
 
-        for info in data:
-            info_text = info.get_text().strip()
-            class_list = info.get('class', [])
+        for td in data:
+            info_text = td.get_text().strip()
+            class_list = td.get('class', [])
 
             processed_financial_value = None
 
+            # if it's the first cell (no numbers seen yet) and either un-classed or class="text",
+            # treat it as the label
+            if not numeric_data_available and info_text and (not class_list or 'text' in class_list):
+                xbrl_element = _process_xbrl_element(td)
+                label = info_text
+                continue
+
             if 'pl' in class_list:
                 # pl class indicates the td is the financial label
-                xbrl_element = _process_xbrl_element(info)
+                xbrl_element = _process_xbrl_element(td)
                 # print(xbrl_element)
                 label = info_text
 
             elif 'nump' in class_list or 'num' in class_list:
                 # nump class indicates td, and so more generally, the row, has numeric data
                 numeric_data_available = True
-                processed_financial_value = _process_financial_value(info_text, xbrl_element, unit_text)
+                if xbrl_element is not None:
+                    processed_financial_value = _process_financial_value(
+                        info_text, xbrl_element, unit_text
+                    )
 
             elif 'text' in class_list:
-                if numeric_data_available:
-                    # this corner case occurs when a given element appears sparsely (e.g. not collected in every period)
-                    processed_financial_value = _process_financial_value(info_text, xbrl_element, unit_text)
+                if numeric_data_available and xbrl_element is not None:
+                    # this corner case occurs when a given element appears sparsely
+                    processed_financial_value = _process_financial_value(
+                        info_text, xbrl_element, unit_text
+                    )
                 # else:
-                # 	# super label (abstract - no financial data)
-                # 	print(xbrl_element)
+                #     # super label (abstract - no financial data)
+                #     print(xbrl_element)
 
             if processed_financial_value is not None:
                 # print(index)
                 if value_index >= len(financial_info):
-                    print(f"[WARN] Skipping value at index {value_index} — exceeds financial_info length {len(financial_info)}")
+                    print(f"[WARN] Skipping value at index {value_index} — "
+                          f"exceeds financial_info length {len(financial_info)}")
                 else:
                     financial_info_map = financial_info[value_index].map
                     if xbrl_element and xbrl_element not in financial_info_map:
                         # handles adjustment details
                         # e.g. https://www.sec.gov/Archives/edgar/data/867773/0000867773-18-000082.txt
-                        financial_info_map[xbrl_element] = FinancialElement(label, processed_financial_value)
+                        financial_info_map[xbrl_element] = FinancialElement(
+                            label, processed_financial_value
+                        )
                 value_index += 1  # advance only when we store a value
 
     # Remove empty reports
@@ -283,23 +310,29 @@ def _process_period(info_text):
 def _process_xbrl_element(info):
     '''
     Returns the name of the XBRL element in info (html BeautifulSoup).
-    Leaving "us-gaap_" prefix in so it's contains both the namespace
-    and elementName of the XBRL (in case it's not always us-gaap)
-
-    :param info: must be an html element with an anchor child that has an
-        onclick attribute of the form: 
-        onclick="top.Show.showAR( this, 'defref_<xbrl_name>', window );"
-    :return: <xbrl_name>
+    Tries, in order:
+      1. the onclick of a child <a> (defref_…)
+      2. an id or name attribute on the <td> itself
+      3. a slugified version of the visible text
     '''
-    # us-gaap namespace element is in the onclick of the anchor tag
+    # 1) Try the anchor’s onclick
     anchor = info.find('a')
-    onclick_attr = anchor.attrs['onclick']
-    # strip javascript
-    xbrl_element = onclick_attr.replace(
-        'top.Show.showAR( this, \'defref_', ''
-        ).replace('\', window );', '')
+    if anchor:
+        onclick = anchor.attrs.get('onclick', '')
+        m = re.search(r"defref_([^']+)'", onclick)
+        if m:
+            return m.group(1)
 
-    return xbrl_element
+    # 2) Try id/name on the <td> itself
+    if info.has_attr('id'):
+        return info['id']
+    if info.has_attr('name'):
+        return info['name']
+
+    # 3) Last resort: slugify the label text
+    txt = info.get_text(separator=' ').strip().lower()
+    slug = re.sub(r'[^a-z0-9]+', '_', txt).strip('_')
+    return slug or None
 
 
 
@@ -322,18 +355,19 @@ def _process_financial_value(text, xbrl_element, unit_text):
     try:
         amount = float(amount_text)
         value = -amount if is_negative else amount
+        u = (unit_text or "").lower()
 
         # handle units
         if('PerShare' in xbrl_element):
             value = value # no change
-        elif (('Shares' in xbrl_element and 'shares in billions' in unit_text.lower())
-            or ('Shares' not in xbrl_element and '$ in billions' in unit_text.lower())):
+        elif (('Shares' in xbrl_element and 'shares in billions' in u)
+            or ('Shares' not in xbrl_element and '$ in billions' in u)):
             value = value * 1000000000
-        elif (('Shares' in xbrl_element and 'shares in millions' in unit_text.lower())
-            or ('Shares' not in xbrl_element and '$ in millions' in unit_text.lower())):
+        elif (('Shares' in xbrl_element and 'shares in millions' in u)
+            or ('Shares' not in xbrl_element and '$ in millions' in u)):
             value = value * 1000000
-        elif (('Shares' in xbrl_element and 'shares in thousands' in unit_text.lower())
-            or ('Shares' not in xbrl_element and '$ in thousands' in unit_text.lower())):
+        elif (('Shares' in xbrl_element and 'shares in thousands' in u)
+            or ('Shares' not in xbrl_element and '$ in thousands' in u)):
             value = value * 1000
 
     except ValueError:

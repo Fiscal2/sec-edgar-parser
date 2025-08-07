@@ -4,6 +4,7 @@ Logic related to the handling of filings and documents
 # import csv
 # import re
 # import os
+import difflib
 import re
 from bs4 import BeautifulSoup
 import requests
@@ -28,9 +29,11 @@ class Statements:
     # TODO: perhaps add guessing/best match functionality to limit this list
     income_statements = ['consolidated statements of income',
                     'consolidated statement of income',
-                    'consolidated statements of operations',                    
+                    'consolidated statements of operations',
+                    'income statements',
+                    'consolidated statement of operations',                    
                     'consolidated statement of earnings',
-                    'consolidated statements of earnings'                    
+                    'consolidated statements of earnings',                    
                     'condensed consolidated statements of income (unaudited)',
                     'condensed consolidated statements of income',
                     'condensed consolidated statements of operations (unaudited)',
@@ -43,10 +46,10 @@ class Statements:
                     'consolidated statements of comprehensive income', 
                     ]
     balance_sheets = ['consolidated balance sheets',
-                    'consolidated balance sheets',
+                    'BALANCE SHEETS',
                     'consolidated balance sheet',
                     'consolidated statement of financial position',
-                    'consolidated statements of financial position '
+                    'consolidated statements of financial position',
                     'condensed consolidated statement of financial position (current period unaudited)',
                     'condensed consolidated statement of financial position (unaudited)',
                     'condensed consolidated statement of financial position',
@@ -58,10 +61,11 @@ class Statements:
                     ]
     cash_flows = ['consolidated statements of cash flows',
                     'consolidated statement of cash flows',
-                    'consolidated Statements of cash flows (unaudited)',
+                    'consolidated statements of cash flows (unaudited)',
                     'condensed consolidated statements of cash flows (unaudited)',
                     'condensed consolidated statements of cash flows',
-                    'condensed statements of cash flows'
+                    'condensed statements of cash flows',
+                    'cash flows statements'
                     ]
 
     all_statements = income_statements + balance_sheets + cash_flows
@@ -146,9 +150,13 @@ class Filing:
             filing_summary_xml = filing_summary_doc.doc_text.xml
 
             for short_name in statement_short_names:
+                if not short_name:
+                    print("Skipping empty or None short_name in _get_statement")
+                    continue
+
                 filename = self.get_html_file_name(filing_summary_xml, short_name)
                 if filename is not None:
-                    statement_names += [(short_name, filename)]
+                    statement_names.append((short_name, filename))
         else:
             print('No financial documents in this filing')
 
@@ -162,33 +170,39 @@ class Filing:
 
     @staticmethod
     def get_html_file_name(filing_summary_xml, report_short_name):
-        '''
-        Return the HtmlFileName (FILENAME) of the Report in FilingSummary.xml
-        (filing_summary_xml) with ShortName in lowercase matching report_short_name
-        e.g.
-             report_short_name of consolidated statements of income matches
-             CONSOLIDATED STATEMENTS OF INCOME
-        '''
-        def normalize(s):
-            return ' '.join(s.lower().strip().replace('\n', '').split())
-        reports = filing_summary_xml.find_all('report')
+        def normalize(s: str) -> str:
+            if not s:
+                return ""
+            s = s.lower()
+            # remove anything in parentheses
+            s = re.sub(r"\(.*?\)", "", s)
+            # collapse whitespace
+            return " ".join(s.split())
+
         target = normalize(report_short_name)
 
-        for report in reports:
-            shortname_tag = report.find('shortname')
-            if shortname_tag is None:
-                print('The following report has no ShortName element')
-                print(report)
+        # build list of (normalized_shortname, htmlfilename)
+        candidates = []
+        for rpt in filing_summary_xml.find_all("report"):
+            sn = rpt.find("shortname")
+            fn = rpt.find("htmlfilename")
+            if not sn or not sn.get_text(strip=True) or not fn:
                 continue
-            # otherwise, get the text and keep procesing
-            short_name = normalize(shortname_tag.get_text())
-            # we want to make sure it matches, up until the end of the text
-            if short_name == target or target in short_name or short_name in target:
-                filename_tag = report.find('htmlfilename')
-                if filename_tag:
-                    return filename_tag.get_text()
-                
-        print(f'could not find anything for ShortName {report_short_name.lower()}')
+            norm = normalize(sn.get_text())
+            candidates.append((norm, fn.get_text()))
+
+        # exact match
+        for norm, fn in candidates:
+            if norm == target:
+                return fn
+
+        # Fuzzy fallback
+        shortnames = [n for n, _ in candidates]
+        best = difflib.get_close_matches(target, shortnames, n=1, cutoff=0.6)
+        if best:
+            return dict(candidates)[best[0]]
+
+        print(f"could not find anything for ShortName {target!r}")
         return None
     
     def extract_company_name(self):
@@ -206,7 +220,6 @@ class Filing:
                     # Remove trailing "\XX" state code if present
                     name = re.sub(r'\\[A-Z]{2}\\?$', '', name)
 
-                    logger.info(f"Cleaned company name: {name}")
                     return name
                 
 
@@ -215,8 +228,20 @@ class Filing:
         except Exception as e:
             logger.error(f"Error extracting company name from SGML: {e}")
             return None
+        
+    def debug_print_shortnames(self):
+        """Print all <shortName> values in the FilingSummary.xml for this filing."""
+        if FILING_SUMMARY_FILE not in self.documents:
+            print("No FilingSummary.xml found.")
+            return
 
-
+        xml = self.documents[FILING_SUMMARY_FILE].doc_text.xml
+        print(f"\nAvailable ShortNames in {self.company or self.url}:")
+        for rpt in xml.find_all("report"):
+            sn = rpt.find("shortname")
+            if sn and sn.get_text(strip=True):
+                print("  •", sn.get_text(strip=True))
+        print()
 
 
     def get_income_statements(self):

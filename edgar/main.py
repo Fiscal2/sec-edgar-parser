@@ -72,30 +72,37 @@ def extract_financial_data(filing, ticker, *years):
     try:
         logger.info(f"Checking reports for {ticker} in years: {years}")
 
-        # Extract traditional financial statements
-        income = convert_report(filing.get_income_statements())
+        # ——— Income statement ———
+        raw_income = filing.get_income_statements()
+        if not raw_income or isinstance(raw_income, list):
+            logger.error(f"No income-statement report found for {ticker}")
+            return None, None, None, None
+        income = convert_report(raw_income)
         income_reports = filter_reports_by_years(income["reports"], years)
 
-        balance = convert_report(filing.get_balance_sheets())
+        # ——— Balance sheet ———
+        raw_balance = filing.get_balance_sheets()
+        if not raw_balance or isinstance(raw_balance, list):
+            logger.error(f"No balance-sheet report found for {ticker}")
+            return None, None, None, None
+        balance = convert_report(raw_balance)
         balance_reports = filter_reports_by_years(balance["reports"], years)
 
-        cash = convert_report(filing.get_cash_flows())
+        # ——— Cash flow ———
+        raw_cash = filing.get_cash_flows()
+        if not raw_cash or isinstance(raw_cash, list):
+            logger.error(f"No cash-flow report found for {ticker}")
+            return None, None, None, None
+        cash = convert_report(raw_cash)
         cash_reports = filter_reports_by_years(cash["reports"], years)
-        
+
         logger.info(
             f"Filtered data counts for years {years} — "
             f"Income: {len(income_reports)}, Balance: {len(balance_reports)}, "
             f"Cash: {len(cash_reports)}"
         )
 
-        income_valid = validate_financial_data(income_reports, "income", ticker)
-        balance_valid = validate_financial_data(balance_reports, "balance", ticker)
-        cash_valid = validate_financial_data(cash_reports, "cash", ticker)
-        
-        # Always proceed with revenue data, even if validation fails
-        # The upload function should handle empty/fallback data gracefully
-        
-        if income_valid and balance_valid and cash_valid:
+        if income_reports and balance_reports and cash_reports:
             return income_reports, balance_reports, cash_reports, max(years)
 
         logger.error(f"No valid reports found for {ticker} in {years}")
@@ -138,8 +145,8 @@ def process_company_filing(ticker, target_year):
         return False
 
 def main():
-    tickers = ['AAPL']
-    years = [2024,2023]
+    tickers = ['MSFT']
+    years = [2024]
 
     results = {
         'successful': [],
