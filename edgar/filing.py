@@ -46,7 +46,6 @@ class Statements:
                     'consolidated statements of comprehensive income', 
                     ]
     balance_sheets = ['consolidated balance sheets',
-                    'BALANCE SHEETS',
                     'consolidated balance sheet',
                     'consolidated statement of financial position',
                     'consolidated statements of financial position',
