@@ -6049,7 +6049,6 @@ cik,symbol,year,quarter,filing_url
 1325955,ALJ,2017/,QTR3/,https://www.sec.gov/Archives/edgar/data/1325955/0001209191-17-042637.txt
 352363,KATE,2017/,QTR3/,https://www.sec.gov/Archives/edgar/data/1680089/0001209191-17-045071.txt
 1407739,DFT,2017/,QTR3/,https://www.sec.gov/Archives/edgar/data/1617555/0001407739-17-000107.txt
-1587755,SNOW,2017/,QTR3/,https://www.sec.gov/Archives/edgar/data/1598092/0001209191-17-046703.txt
 1244937,ENOC,2017/,QTR3/,https://www.sec.gov/Archives/edgar/data/1387796/0001244937-17-000092.txt
 1563699,COVS,2017/,QTR3/,https://www.sec.gov/Archives/edgar/data/1587372/0000899243-17-019302.txt
 1561781,nxes,2017/,QTR3/,https://www.sec.gov/Archives/edgar/data/1716376/0001716376-17-000001.txt
@@ -7838,7 +7837,7 @@ cik,symbol,year,quarter,filing_url
 1565687,INTA,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1106566/0001565687-25-000028.txt
 1529274,ALKT,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1106642/0001529274-25-000134.txt
 1110611,ONTF,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1110611/0001562180-25-005209.txt
-1874178,RIVN,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1111708/0001104659-25-066875.txt
+1874178,RIVN,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1874178/0001874178-24-000014.txt
 1711933,AKYA,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1113663/0001062993-25-012725.txt
 1726445,SEER,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1117003/0001415889-25-019573.txt
 2057463,GLIBK,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1120556/0001225208-25-006648.txt
@@ -7906,11 +7905,11 @@ cik,symbol,year,quarter,filing_url
 1691421,LMND,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1232142/0001691421-25-000110.txt
 1468327,RENT,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1232142/0001468327-25-000132.txt
 1871638,BZAI,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1233160/0000950170-25-093367.txt
-1640147,SNOW,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1234281/0001640147-25-000152.txt
+1640147,SNOW,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1640147/0001640147-24-000101.txt
 1825024,OPAD,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1235820/0000950170-25-092183.txt
 1802457,ORGN,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1236555/0001415889-25-018994.txt
 1824502,ACHR,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1237371/0001415889-25-018830.txt
-1713445,RDDT,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1237450/0001713445-25-000178.txt
+1713445,RDDT,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1713445/0001713445-25-000018.txt
 1447362,CSTL,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1239501/0001447362-25-000093.txt
 1832332,AVAH,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1239606/0000950170-25-095436.txt
 1851003,ZETA,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1241677/0000950170-25-093774.txt
@@ -7989,3 +7988,6 @@ cik,symbol,year,quarter,filing_url
 1880613,DRCT,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1203452/0001880613-25-000055.txt
 1957845,NONE,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1207059/0001628280-25-035726.txt
 1657312,VRNA,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1207107/0001104659-25-074388.txt
+1910139,MBLY,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1910139/0001410578-25-000127.txt
+1094517,TM,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/1094517/0001193125-24-167462.txt
+715153,HMC,2025/,QTR3/,https://www.sec.gov/Archives/edgar/data/715153/0001193125-21-196757.txt

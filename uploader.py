@@ -63,7 +63,7 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash, company_nam
         }
 
         if company_name:
-            payload["company_name"] = company_name
+            payload["company_name"] = company_name.upper()
 
         # Extract total revenue from income statement
         total_revenue = None

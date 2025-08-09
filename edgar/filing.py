@@ -33,7 +33,9 @@ class Statements:
                     'income statements',
                     'consolidated statement of operations',                    
                     'consolidated statement of earnings',
-                    'consolidated statements of earnings',                    
+                    'consolidated statements of earnings',    
+                    'consolidated statements of operations and comprehensive income (loss)',
+                    'consolidated statements of operations and comprehensive income',                
                     'condensed consolidated statements of income (unaudited)',
                     'condensed consolidated statements of income',
                     'condensed consolidated statements of operations (unaudited)',
@@ -43,7 +45,8 @@ class Statements:
                     'condensed statements of income',
                     'condensed statements of operations',
                     'condensed statements of operations and comprehensive loss',
-                    'consolidated statements of comprehensive income', 
+                    'consolidated statements of comprehensive income',
+                    'statements of consolidated income'
                     ]
     balance_sheets = ['consolidated balance sheets',
                     'consolidated balance sheet',
@@ -56,7 +59,7 @@ class Statements:
                     'condensed consolidated balance sheets (unaudited)',
                     'condensed consolidated balance sheets',
                     'condensed balance sheets',
-                    'consolidated statements of financial position'
+                    'balance sheets',
                     ]
     cash_flows = ['consolidated statements of cash flows',
                     'consolidated statement of cash flows',
@@ -64,7 +67,8 @@ class Statements:
                     'condensed consolidated statements of cash flows (unaudited)',
                     'condensed consolidated statements of cash flows',
                     'condensed statements of cash flows',
-                    'cash flows statements'
+                    'cash flows statements',
+                    'statements of consolidated cash flows'
                     ]
 
     all_statements = income_statements + balance_sheets + cash_flows
@@ -197,7 +201,7 @@ class Filing:
 
         # Fuzzy fallback
         shortnames = [n for n, _ in candidates]
-        best = difflib.get_close_matches(target, shortnames, n=1, cutoff=0.6)
+        best = difflib.get_close_matches(target, shortnames, n=1, cutoff=0.85)
         if best:
             return dict(candidates)[best[0]]
 
