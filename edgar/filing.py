@@ -173,40 +173,73 @@ class Filing:
 
     @staticmethod
     def get_html_file_name(filing_summary_xml, report_short_name):
+        import re, difflib
+
         def normalize(s: str) -> str:
             if not s:
                 return ""
             s = s.lower()
-            # remove anything in parentheses
-            s = re.sub(r"\(.*?\)", "", s)
-            # collapse whitespace
-            return " ".join(s.split())
+            s = re.sub(r"\(.*?\)", "", s)  # strip parentheticals
+            s = " ".join(s.split())        # collapse whitespace
+            return s
+
+        def r_index(fn: str) -> int:
+            # Pull numeric index from filenames like R3.htm / r12.htm
+            m = re.search(r'[rR](\d+)\.htm', fn or "")
+            return int(m.group(1)) if m else 9999
 
         target = normalize(report_short_name)
 
-        # build list of (normalized_shortname, htmlfilename)
+        # Build candidates
         candidates = []
         for rpt in filing_summary_xml.find_all("report"):
             sn = rpt.find("shortname")
             fn = rpt.find("htmlfilename")
             if not sn or not sn.get_text(strip=True) or not fn:
                 continue
-            norm = normalize(sn.get_text())
-            candidates.append((norm, fn.get_text()))
+            raw = sn.get_text(strip=True)
+            norm = normalize(raw)
+            candidates.append({
+                "raw": raw,
+                "norm": norm,
+                "fn": fn.get_text(),
+                "is_parenthetical": "parenthetical" in raw.lower(),
+                "ridx": r_index(fn.get_text())
+            })
 
-        # exact match
-        for norm, fn in candidates:
-            if norm == target:
-                return fn
+        # Always prefer non-parenthetical
+        non_paren = [c for c in candidates if not c["is_parenthetical"]]
+        pool = non_paren if non_paren else candidates
 
-        # Fuzzy fallback
-        shortnames = [n for n, _ in candidates]
-        best = difflib.get_close_matches(target, shortnames, n=1, cutoff=0.85)
+        # 1) Exact match on normalized
+        exact = [c for c in pool if c["norm"] == target]
+        if exact:
+            exact.sort(key=lambda c: (c["ridx"], len(c["norm"])))
+            return exact[0]["fn"]
+
+        # 2) Contains / contained-by (handles minor wording differences)
+        loose = [c for c in pool if (target in c["norm"] or c["norm"] in target)]
+        if loose:
+            loose.sort(key=lambda c: (c["ridx"], abs(len(c["norm"]) - len(target))))
+            return loose[0]["fn"]
+
+        # 3) Fuzzy match with higher cutoff (be stricter)
+        shortnames = [c["norm"] for c in pool]
+        best = difflib.get_close_matches(target, shortnames, n=1, cutoff=0.9)
         if best:
-            return dict(candidates)[best[0]]
+            chosen = next(c for c in pool if c["norm"] == best[0])
+            return chosen["fn"]
+
+        # Last resort: fuzzy on all candidates with a slightly lower cutoff
+        shortnames_all = [c["norm"] for c in candidates]
+        best_any = difflib.get_close_matches(target, shortnames_all, n=1, cutoff=0.85)
+        if best_any:
+            chosen = next(c for c in candidates if c["norm"] == best_any[0])
+            return chosen["fn"]
 
         print(f"could not find anything for ShortName {target!r}")
         return None
+
     
     def extract_company_name(self):
         try:
