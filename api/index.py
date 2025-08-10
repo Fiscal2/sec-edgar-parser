@@ -1,10 +1,9 @@
 # api/index.py
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from edgar.api import router as edgar_router
 
-# Add root_path so /api/index/* resolves to /health, /parse, etc. inside the app
-app = FastAPI(title="EDGAR API", root_path="/api/index")
+app = FastAPI(title="EDGAR API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,11 +15,17 @@ app.add_middleware(
 
 @app.get("/")
 def root():
-    return {"status": "ok", "try": ["/api/health", "/api/docs", "/api/parse"]}
+    return {"status": "ok", "try": ["/api/index/health", "/api/index/docs", "/api/index/parse"]}
 
-app.include_router(edgar_router, prefix="")
+# Mount routes at BOTH "" and "/index" to handle Vercel pathing
+app.include_router(edgar_router, prefix="")         # matches /api/index/health when ASGI path == "/health"
+app.include_router(edgar_router, prefix="/index")   # matches /api/index/health when ASGI path == "/index/health"
 
-# debug: list mounted routes so we can see what’s actually there
-@app.get("/routes")
-def routes():
-    return sorted([r.path for r in app.router.routes])
+# (optional) temporary debug route
+@app.get("/__scope")
+def scope(request: Request):
+    return {
+        "root_path": request.scope.get("root_path"),
+        "path": request.scope.get("path"),
+        "headers": [(k.decode(), v.decode()) for k, v in request.scope.get("headers", [])]
+    }
