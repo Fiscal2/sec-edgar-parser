@@ -4,11 +4,7 @@
       "runtime": "python3.11",
       "memory": 1536,
       "maxDuration": 60,
-      "includeFiles": [
-        "edgar/**",
-        "uploader.py",
-        "supabase_client.py"
-      ]
+      "includeFiles": "{edgar/**,uploader.py,supabase_client.py}"
     }
   },
   "rewrites": [
