@@ -19,4 +19,7 @@ def root():
 
 app.include_router(edgar_router, prefix="")
 
-
+# debug: list mounted routes so we can see what’s actually there
+@app.get("/routes")
+def routes():
+    return sorted([r.path for r in app.router.routes])
