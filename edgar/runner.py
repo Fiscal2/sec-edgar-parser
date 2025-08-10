@@ -1,8 +1,9 @@
 # app/runner.py
 import os
 from typing import List, Dict, Any
-from fastapi import logger
 from .main import process_company_filing  # your existing function
+import logging
+logger = logging.getLogger(__name__)
 
 def run_multiple(ticker: str, years: List[int]) -> List[Dict[str, Any]]:
     logger.info(f"Running parser for ticker={ticker}, years={years}")
