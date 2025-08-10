@@ -114,35 +114,34 @@ def extract_financial_data(filing, ticker, *years):
 
 def process_company_filing(ticker, target_year):
     logger.info(f"Processing {ticker} 10-K targeting report year {target_year}")
-    try:
-        stock = Stock(ticker)
+    stock = Stock(ticker)
 
-        # Try filing years: [target_year, target_year + 1]
-        for filing_year in [target_year, target_year + 1]:
+    for filing_year in (target_year, target_year + 1):
+        try:
             filing = stock.get_filing('annual', filing_year, 4)
+        except Exception as e:
+            logger.warning(f"No 10-K found for {ticker} in {filing_year}: {e}")
+            continue
+
+        try:
             company_name = filing.extract_company_name()
             logger.info(f"Extracted company name: {company_name}")
 
-
-            if not filing:
-                logger.warning(f"No 10-K filed in {filing_year} for {ticker}")
-                continue
-
-            # Try to extract reports *containing* the target report year
+            # Your function that locates R3/R5/R7 (or best-match) and filters rows to the report year
             income, balance, cash, report_year = extract_financial_data(filing, ticker, target_year)
 
             if income and balance and cash:
                 logger.info(f"📦 Uploading {ticker} 10-K with report year {report_year} (filed in {filing_year})")
+                ok = upload_to_supabase(ticker, report_year, 0, income, balance, cash, company_name)
+                return bool(ok)
+            else:
+                logger.info(f"Missing statements for {ticker} (filing year {filing_year}); trying next year…")
+        except Exception as e:
+            logger.exception(f"Failed while parsing {ticker} filing for {filing_year}: {e}")
+            # try the next filing_year
 
-                # Always attempt upload, even with empty/fallback revenue data
-                return upload_to_supabase(ticker, report_year, 0, income, balance, cash, company_name)
-
-        logger.error(f"No 10-K with report year {target_year} found for {ticker}")
-        return False
-
-    except Exception as e:
-        logger.error(f"Failed to process {ticker} targeting {target_year}: {e}", exc_info=True)
-        return False
+    logger.error(f"No 10-K with report year {target_year} found for {ticker}")
+    return False
 
 def main():
     tickers = ['XOM']

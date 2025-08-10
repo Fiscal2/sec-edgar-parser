@@ -11,56 +11,42 @@ class Stock:
         self.symbol = symbol
         self.cik = self._find_cik()
 
-
     def _find_cik(self):
-        df = pd.read_csv(SYMBOLS_DATA_PATH, converters={'cik' : str})
+        df = pd.read_csv(SYMBOLS_DATA_PATH, converters={'cik': str})
         try:
             cik = df.loc[df['symbol'] == self.symbol]['cik'].iloc[0]
-            print('cik for {} is {}'.format(self.symbol, cik))
+            print(f'cik for {self.symbol} is {cik}')
             return cik
-        except IndexError as e:
+        except IndexError:
             raise IndexError('could not find cik, must add to symbols.csv') from None
 
-
     def get_filing(self, period='annual', year=0, quarter=0):
-        '''
-        Returns the Filing closest to the given period, year, and quarter.
-        Raises NoFilingInfoException if nothing is found for the params.
+        """
+        Return the first matching Filing searching in this order:
+        1) target year: Q4 -> Q1
+        2) next year:   Q1 -> Q4  (common case: report year N filed in year N+1)
+        3) prior year:  Q4 -> Q1  (last resort)
+        """
+        target_year = datetime.now().year if year == 0 else year
 
-        :param period: either "annual" (default) or "quarterly"
-        :param year: year to search, if 0, will default latest
-        :param quarter: 1, 2, 3, 4, or default value of 0 to get the latest
-        '''
-        filing_info_list = get_financial_filing_info(period=period, cik=self.cik, year=year, quarter=quarter)
+        search_plan = []
+        # same year, reverse quarters
+        search_plan += [(target_year, q) for q in (4, 3, 2, 1)]
+        # next year, forward quarters
+        search_plan += [(target_year + 1, q) for q in (1, 2, 3, 4)]
+        # prior year, reverse quarters (last resort)
+        search_plan += [(target_year - 1, q) for q in (4, 3, 2, 1)]
 
-        if len(filing_info_list) == 0:
-            # get the latest
-            current_year = datetime.now().year if year == 0 else year
-            current_quarter = quarter if quarter > 0 else get_latest_quarter_dir(current_year)[0]
-            print('No {} filing info found for year={} quarter={}. Finding latest.'.format(period, current_year, current_quarter))
+        for y, q in search_plan:
+            filing_info_list = get_financial_filing_info(period=period, cik=self.cik, year=y, quarter=q)
+            if filing_info_list:
+                url = filing_info_list[0].url
+                return Filing(company=self.symbol, url=url)
 
-            # go back through the quarters to find the latest
-            filing_info_list = find_latest_filing_info_going_back_from(period, self.cik, current_year, current_quarter)
-
-            if len(filing_info_list) == 0:
-                # we still have nothing, one last try with the previous year
-                # this is useful when you're checking for data early on in a
-                # calendar year, since it takes time for the filings to come in
-                print('Will do a final attempt to find filing info from last year')
-                filing_info_list = find_latest_filing_info_going_back_from(period, self.cik, current_year - 1, 4)
-
-            if len(filing_info_list) == 0:
-                # still not successful, throw hands up and quit
-                raise NoFilingInfoException('No filing info found. Try a different period (annual/quarterly), year, and/or quarter.')
-
-        filing_info = filing_info_list[0]
-
-        url = filing_info.url
-        filing = Filing(company=self.symbol, url=url)
-
-        return filing
-
-
+        # nothing found anywhere
+        raise NoFilingInfoException(
+            f'No filing info found for {self.symbol} (period={period}, target_year={target_year})'
+        )
 
 class NoFilingInfoException(Exception):
     pass

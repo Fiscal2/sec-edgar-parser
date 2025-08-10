@@ -1,7 +1,7 @@
 # app/runner.py
 import os
 from typing import List, Dict, Any
-from .main import process_company_filing  # your existing function
+from .main import process_company_filing
 import logging
 logger = logging.getLogger(__name__)
 
