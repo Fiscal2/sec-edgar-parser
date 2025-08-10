@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator, validator
 from starlette.concurrency import run_in_threadpool
 
-from runner import run_multiple  # wraps process_company_filing for multi-year runs
+from edgar.runner import run_multiple  # wraps process_company_filing for multi-year runs
 
 # ---------- Logging ----------
 logger = logging.getLogger("sec-edgar-api")
