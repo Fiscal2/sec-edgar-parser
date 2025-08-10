@@ -145,8 +145,8 @@ def process_company_filing(ticker, target_year):
         return False
 
 def main():
-    tickers = ['DE']
-    years = [2021]
+    tickers = ['XOM']
+    years = [2022,2023,2024]
 
     results = {
         'successful': [],

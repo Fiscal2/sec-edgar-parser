@@ -37,7 +37,7 @@ SYMBOLS_DATA_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'd
 
 FINANCIAL_FORM_MAP = {
     # Sometimes have to remove 10-K/A # add 20-F for Foreign Companies
-    'annual': ['10-K','10-K/A'],
+    'annual': ['10-K','10-K/A','20-F'],
     'quarterly': ['10-Q','10-Q/A'],
 }
 SUPPORTED_FORMS = FINANCIAL_FORM_MAP['annual'] + FINANCIAL_FORM_MAP['quarterly'] + ['3', '4', '5']

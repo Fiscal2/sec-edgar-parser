@@ -29,6 +29,7 @@ class Statements:
     # TODO: perhaps add guessing/best match functionality to limit this list
     income_statements = ['consolidated statements of income',
                     'consolidated statement of income',
+                    'consolidated income statements',
                     'consolidated statements of operations',
                     'income statements',
                     'consolidated statement of operations',                    
@@ -46,7 +47,8 @@ class Statements:
                     'condensed statements of operations',
                     'condensed statements of operations and comprehensive loss',
                     'consolidated statements of comprehensive income',
-                    'statements of consolidated income'
+                    'statements of consolidated income',
+                    'consolidated statements of profit or loss and other comprehensive income',
                     ]
     balance_sheets = ['consolidated balance sheets',
                     'consolidated balance sheet',

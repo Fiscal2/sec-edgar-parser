@@ -1,0 +1,9 @@
+fastapi
+uvicorn==0.30.*
+starlette
+pydantic
+beautifulsoup4
+lxml
+requests
+httpx
+supabase
