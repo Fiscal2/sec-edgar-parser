@@ -3,7 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from edgar.api import router as edgar_router
 
-app = FastAPI(title="EDGAR API")
+# Add root_path so /api/index/* resolves to /health, /parse, etc. inside the app
+app = FastAPI(title="EDGAR API", root_path="/api/index")
 
 app.add_middleware(
     CORSMiddleware,
