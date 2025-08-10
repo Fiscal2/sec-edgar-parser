@@ -2,7 +2,7 @@
 from typing import List, Dict, Any, Optional
 import logging
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator, validator
 from starlette.concurrency import run_in_threadpool
@@ -24,6 +24,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+router = APIRouter()
 
 # ---------- Models ----------
 class ParseRequest(BaseModel):
@@ -51,9 +53,9 @@ class ParseResult(BaseModel):
     message: Optional[str] = None
 
 # ---------- Routes ----------
-@app.get("/health")
-async def health() -> Dict[str, str]:
-    return {"status": "i'm all good mom"}
+@router.get("/docs-ping")
+def docs_ping():
+    return {"ok": True}
 
 @app.post("/parse", response_model=ParseResult)
 async def parse_filings(payload: ParseRequest):
