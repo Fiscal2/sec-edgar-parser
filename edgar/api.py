@@ -1,4 +1,3 @@
-# edgar/api.py
 from typing import List, Dict, Any, Optional
 import logging
 
@@ -10,11 +9,16 @@ from edgar.runner import run_multiple
 
 logger = logging.getLogger("sec-edgar-api")
 
+# Explicitly set no prefix — index.py handles root_path="/api"
 router = APIRouter()
 
+# -------------------------
+# Request/Response Models
+# -------------------------
+
 class ParseRequest(BaseModel):
-    ticker: str = Field(..., min_length=1, max_length=10)
-    years: List[int] = Field(...)
+    ticker: str = Field(..., min_length=1, max_length=10, description="Stock ticker symbol (e.g., COST)")
+    years: List[int] = Field(..., description="List of years to parse")
 
     @field_validator("ticker")
     def normalize_ticker(cls, v: str) -> str:
@@ -35,12 +39,23 @@ class ParseResult(BaseModel):
     results: Dict[str, Any]
     message: Optional[str] = None
 
-@router.get("/health", tags=["health"])
+# -------------------------
+# Routes
+# -------------------------
+
+@router.get("/health", tags=["Health"])
 def health():
+    """Health check endpoint for the EDGAR parser API."""
     return {"ok": True}
 
-@router.post("/parse", response_model=ParseResult)  
+@router.post("/parse", response_model=ParseResult, tags=["Parser"])
 async def parse_filings(payload: ParseRequest):
+    """
+    Run the EDGAR parser for the given ticker and years.
+
+    - **ticker**: Stock ticker symbol (e.g., COST)
+    - **years**: List of years to parse (1994-2100)
+    """
     try:
         results = await run_in_threadpool(run_multiple, payload.ticker, payload.years)
         return ParseResult(
@@ -52,4 +67,5 @@ async def parse_filings(payload: ParseRequest):
     except Exception as e:
         logger.exception("Parse failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
 

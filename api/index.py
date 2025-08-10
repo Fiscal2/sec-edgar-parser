@@ -1,9 +1,11 @@
 # api/index.py
+import os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from edgar.api import router as edgar_router
 
-app = FastAPI(title="EDGAR API")
+
+app = FastAPI(title="EDGAR API", root_path="/api")
 
 # CORS
 app.add_middleware(
