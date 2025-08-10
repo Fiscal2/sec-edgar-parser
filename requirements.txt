@@ -21,3 +21,6 @@ tzdata==2024.1
 # Supabase client
 supabase==2.4.0
 
+# Environment variables
+python-dotenv==1.0.1
+
