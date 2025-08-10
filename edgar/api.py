@@ -53,9 +53,9 @@ class ParseResult(BaseModel):
     message: Optional[str] = None
 
 # ---------- Routes ----------
-@app.get("/", tags=["health"])
-def root():
-    return {"status": "ok"}
+@router.get("/health", tags=["health"])
+def health():
+    return {"ok": True}
 
 @app.post("/parse", response_model=ParseResult)
 async def parse_filings(payload: ParseRequest):
