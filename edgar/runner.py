@@ -1,6 +1,6 @@
 # app/runner.py
 from typing import List, Dict, Any
-from main import process_company_filing  # your existing function
+from .main import process_company_filing  # your existing function
 
 def run_multiple(ticker: str, years: List[int]) -> List[Dict[str, Any]]:
     """
