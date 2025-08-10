@@ -15,17 +15,6 @@ app.add_middleware(
 
 @app.get("/")
 def root():
-    return {"status": "ok", "try": ["/api/index/health", "/api/index/docs", "/api/index/parse"]}
+    return {"status": "ok", "try": ["/api/health", "/api/docs", "/api/parse"]}
 
-# Mount routes at BOTH "" and "/index" to handle Vercel pathing
-app.include_router(edgar_router, prefix="")         # matches /api/index/health when ASGI path == "/health"
-app.include_router(edgar_router, prefix="/index")   # matches /api/index/health when ASGI path == "/index/health"
-
-# (optional) temporary debug route
-@app.get("/__scope")
-def scope(request: Request):
-    return {
-        "root_path": request.scope.get("root_path"),
-        "path": request.scope.get("path"),
-        "headers": [(k.decode(), v.decode()) for k, v in request.scope.get("headers", [])]
-    }
+app.include_router(edgar_router, prefix="")     
