@@ -4,7 +4,7 @@ import logging
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, validator
 from starlette.concurrency import run_in_threadpool
 
 from runner import run_multiple  # wraps process_company_filing for multi-year runs
@@ -30,11 +30,11 @@ class ParseRequest(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=10, description="Ticker symbol, e.g. AAPL")
     years: List[int] = Field(..., description="One or more fiscal years, e.g. [2022, 2023]")
 
-    @validator("ticker")
+    @field_validator("ticker")
     def normalize_ticker(cls, v: str) -> str:
         return v.strip().upper()
 
-    @validator("years")
+    @field_validator("years")
     def validate_years(cls, v: List[int]) -> List[int]:
         if not v:
             raise ValueError("Must provide at least one year")
@@ -53,7 +53,7 @@ class ParseResult(BaseModel):
 # ---------- Routes ----------
 @app.get("/health")
 async def health() -> Dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "i'm all good mom"}
 
 @app.post("/parse", response_model=ParseResult)
 async def parse_filings(payload: ParseRequest):
