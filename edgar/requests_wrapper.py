@@ -1,7 +1,12 @@
+import json
 import os
 import requests
 
-HEADERS = os.getenv('HEADERS')
+HEADERS = {
+    "User-Agent": "Zac G zacharyross3@gmail.com",  # use real contact email
+    "Accept-Encoding": "gzip, deflate",
+    "Host": "www.sec.gov"
+}
 
 class GetRequest:
     def __init__(self, url):
