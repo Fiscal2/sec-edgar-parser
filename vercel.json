@@ -1,0 +1,11 @@
+{
+  "rewrites": [
+    { "source": "/api/index/:path*", "destination": "/api/index" }
+  ],
+  "functions": {
+    "api/**/*.py": {
+      "runtime": "python3.11",
+      "includeFiles": "edgar/**"
+    }
+  }
+}
