@@ -3,8 +3,7 @@
     "api/index.py": {
       "runtime": "python3.11",
       "memory": 1536,
-      "maxDuration": 60,
-      "includeFiles": "{edgar/**,uploader.py,supabase_client.py}"
+      "maxDuration": 60
     }
   },
   "rewrites": [
