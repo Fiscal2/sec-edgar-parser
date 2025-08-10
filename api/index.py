@@ -5,6 +5,7 @@ from edgar.api import router as edgar_router
 
 app = FastAPI(title="EDGAR API")
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,8 +14,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/")
 def root():
-    return {"status": "ok", "try": ["/api/health", "/api/docs", "/api/parse"]}
+    return {"status": "ok", "try": ["/api/health", "/api/parse", "/api/docs"]}
 
-app.include_router(edgar_router, prefix="")     
+
+@app.get("/health")
+def health_top():
+    return {"ok": True, "source": "top-level"}
+
+app.include_router(edgar_router, prefix="")
+    
