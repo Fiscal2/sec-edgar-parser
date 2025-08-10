@@ -5,8 +5,7 @@ uvicorn==0.30.6
 starlette==0.38.6
 
 # HTTP clients
-requests==2.32.3
-httpx==0.25.2  
+requests==2.32.3 
 
 # Parsing / HTML / XML
 beautifulsoup4==4.12.3
@@ -17,9 +16,10 @@ pandas==2.2.2
 numpy==2.0.1
 python-dateutil==2.9.0.post0
 tzdata==2024.1
+pytz==2025.2
 
 # Supabase client
-supabase==2.4.0
+supabase==2.7.0
 
 # Environment variables
 python-dotenv==1.0.1
