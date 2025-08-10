@@ -36,7 +36,7 @@ class ParseRequest(BaseModel):
 class ParseResult(BaseModel):
     ticker: str
     attempted_years: List[int]
-    results: Dict[str, Any]
+    results: List[Dict[str, Any]]
     message: Optional[str] = None
 
 # -------------------------
