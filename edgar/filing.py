@@ -110,6 +110,10 @@ class Filing:
         # not concerned with time/timezones
         self.date_filed = datetime.strptime(acceptance_datetime_text, '%Y%m%d')
 
+        print(f"Built {len(self.documents)} SGML documents (sample: {list(self.documents.keys())[:6]})")
+        self.text = None          # drop raw SGML text
+        self.sgml = None          # drop parsed SGML tree
+
 
     def get_financial_data(self):
         '''
@@ -118,6 +122,38 @@ class Filing:
         the specific statement they want (income, balance, cash flows)
         '''
         return self._get_financial_data(self.STATEMENTS.all_statements, True)
+
+    def _prune_documents(self, keep_files: set):
+        """Keep only the target statement files (+ FilingSummary), drop the rest."""
+        keep = set(keep_files) | {FILING_SUMMARY_FILE}
+        removed = 0
+        for k in list(self.documents.keys()):
+            if k not in keep:
+                self.documents.pop(k, None)
+                removed += 1
+        print(f"Pruned {removed} docs; kept {len(self.documents)}")
+
+    def list_statement_files(self) -> set:
+        """Return union of filenames we’ll need for income + balance + cash."""
+        needed = set()
+        for group in (
+            self.STATEMENTS.income_statements,
+            self.STATEMENTS.balance_sheets,
+            self.STATEMENTS.cash_flows,
+        ):
+            for _, fn in self._get_statement(group):
+                if fn:
+                    needed.add(fn)
+        return needed
+
+    def prepare_for_parsing(self):
+        """Discover all targets and prune once so we don't delete what we still need."""
+        keep = self.list_statement_files()
+        if keep:
+            self._prune_documents(keep)
+        else:
+            print("No statement filenames discovered from FilingSummary; skipping prune.")
+
 
     def _get_financial_data(self, statement_short_names, get_all):
         """

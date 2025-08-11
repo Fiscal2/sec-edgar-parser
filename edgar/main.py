@@ -119,6 +119,10 @@ def process_company_filing(ticker, target_year):
     for filing_year in (target_year, target_year + 1):
         try:
             filing = stock.get_filing('annual', filing_year, 4)
+            try:
+                filing.prepare_for_parsing()
+            except Exception as e:
+                logger.warning(f"Prune skipped (no summary?): {e}")
         except Exception as e:
             logger.warning(f"No 10-K found for {ticker} in {filing_year}: {e}")
             continue
@@ -127,7 +131,7 @@ def process_company_filing(ticker, target_year):
             company_name = filing.extract_company_name()
             logger.info(f"Extracted company name: {company_name}")
 
-            # Your function that locates R3/R5/R7 (or best-match) and filters rows to the report year
+            # function that locates R3/R5/R7 (or best-match) and filters rows to the report year
             income, balance, cash, report_year = extract_financial_data(filing, ticker, target_year)
 
             if income and balance and cash:
@@ -144,8 +148,8 @@ def process_company_filing(ticker, target_year):
     return False
 
 def main():
-    tickers = ['XOM']
-    years = [2022]
+    tickers = ['MA']
+    years = [2024]
 
     results = {
         'successful': [],
