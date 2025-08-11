@@ -120,27 +120,42 @@ class Filing:
         return self._get_financial_data(self.STATEMENTS.all_statements, True)
 
     def _get_financial_data(self, statement_short_names, get_all):
-        '''
-        Returns financial data used for processing 10-Q and 10-K documents
-        '''
+        """
+        Returns financial data used for processing 10-Q and 10-K documents.
+        Will skip statements that are missing or fail to parse, so the caller
+        can retry with a different filing year.
+        """
         financial_data = []
 
-        for names in self._get_statement(statement_short_names):
-            short_name = names[0]
-            filename = names[1]
-            print('Getting financial data for {0} (filename: {1})'
-                .format(short_name, filename))
-            financial_html_text = self.documents[filename].doc_text.data
+        for short_name, filename in self._get_statement(statement_short_names):
+            print(f'Getting financial data for {short_name} (filename: {filename})')
 
-            financial_report = get_financial_report(self.company, self.date_filed, financial_html_text)
+            # 1) Safe document lookup
+            doc = self.documents.get(filename)
+            if not doc:
+                # Try case-insensitive match
+                matches = [self.documents[k] for k in self.documents if k.lower() == filename.lower()]
+                if matches:
+                    doc = matches[0]
+                else:
+                    print(f"Skipping '{filename}' — not found in SGML documents")
+                    continue
 
+            # 2) Safe parsing
+            try:
+                financial_html_text = doc.doc_text.data
+                financial_report = get_financial_report(self.company, self.date_filed, financial_html_text)
+            except Exception as e:
+                print(f"Failed to parse {filename}: {e}")
+                continue
+
+            # 3) Append or return based on `get_all`
             if get_all:
                 financial_data.append(financial_report)
             else:
                 return financial_report
 
         return financial_data
-
 
 
     def _get_statement(self, statement_short_names):
