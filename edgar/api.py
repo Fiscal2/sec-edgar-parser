@@ -66,6 +66,11 @@ async def parse_filings(payload: ParseRequest):
         )
     except Exception as e:
         logger.exception("Parse failed: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        return ParseResult(
+            ticker=payload.ticker,
+            attempted_years=payload.years,
+            results=[{"year": y, "success": False, "error": str(e)} for y in payload.years],
+            message="Parse failed",
+        )
 
 
