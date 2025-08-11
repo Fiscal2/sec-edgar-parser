@@ -149,7 +149,7 @@ def process_company_filing(ticker, target_year):
 
 def main():
     tickers = ['MA']
-    years = [2024]
+    years = [2021]
 
     results = {
         'successful': [],

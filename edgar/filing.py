@@ -15,6 +15,7 @@ from edgar.dtd import DTD
 from edgar.financials import get_financial_report
 from datetime import datetime
 import logging
+import gc
 
 
 FILING_SUMMARY_FILE = 'FilingSummary.xml'
@@ -113,6 +114,7 @@ class Filing:
         print(f"Built {len(self.documents)} SGML documents (sample: {list(self.documents.keys())[:6]})")
         self.text = None          # drop raw SGML text
         self.sgml = None          # drop parsed SGML tree
+        gc.collect
 
 
     def get_financial_data(self):
