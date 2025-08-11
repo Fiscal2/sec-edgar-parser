@@ -209,19 +209,21 @@ class Filing:
 
         # Build candidates
         candidates = []
-        for rpt in filing_summary_xml.find_all("report"):
-            sn = rpt.find("shortname")
-            fn = rpt.find("htmlfilename")
+        for rpt in filing_summary_xml.find_all(["report", "Report"]):
+            sn = rpt.find(["shortname", "ShortName"])
+            fn = (rpt.find(["htmlfilename", "HtmlFileName"]) or
+                rpt.find(["filename", "FileName"]))
             if not sn or not sn.get_text(strip=True) or not fn:
                 continue
             raw = sn.get_text(strip=True)
             norm = normalize(raw)
+            fn_text = fn.get_text(strip=True)
             candidates.append({
                 "raw": raw,
                 "norm": norm,
-                "fn": fn.get_text(),
+                "fn": fn_text,
                 "is_parenthetical": "parenthetical" in raw.lower(),
-                "ridx": r_index(fn.get_text())
+                "ridx": r_index(fn_text)
             })
 
         # Always prefer non-parenthetical
