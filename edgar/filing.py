@@ -16,6 +16,7 @@ from edgar.financials import get_financial_report
 from datetime import datetime
 import logging
 import gc
+from lxml import etree
 
 
 FILING_SUMMARY_FILE = 'FilingSummary.xml'
@@ -321,7 +322,38 @@ class Filing:
         except Exception as e:
             logger.error(f"Error extracting company name from SGML: {e}")
             return None
-        
+
+    def extract_listed_exchanges(self):
+        """
+        Extract only the Name of each exchange on which registered 
+        (dei:SecurityExchangeName) from the filing.
+
+        Returns:
+            str or None: First exchange name found (as plain text), or None if not found
+        """
+        seen = set()
+
+        for doc in self.documents.values():
+            soup = getattr(doc.doc_text, "xml", None)
+            if soup is None:
+                try:
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(doc.doc_text.data, "lxml")
+                except Exception:
+                    continue
+
+            for exch_tag in soup.find_all(attrs={"name": "dei:SecurityExchangeName"}):
+                name = exch_tag.get_text(strip=True)
+                if name and name not in seen:
+                    return name  # Return immediately as a string
+
+            try:
+                del soup
+            except Exception:
+                pass
+
+        return None  # If nothing found
+
     def debug_print_shortnames(self):
         """Print all <shortName> values in the FilingSummary.xml for this filing."""
         if FILING_SUMMARY_FILE not in self.documents:

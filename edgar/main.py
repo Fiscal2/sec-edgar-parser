@@ -120,6 +120,7 @@ def process_company_filing(ticker, target_year):
         try:
             filing = stock.get_filing('annual', filing_year, 4)
             try:
+                listed_exchange = filing.extract_listed_exchanges()
                 filing.prepare_for_parsing()
             except Exception as e:
                 logger.warning(f"Prune skipped (no summary?): {e}")
@@ -129,14 +130,14 @@ def process_company_filing(ticker, target_year):
 
         try:
             company_name = filing.extract_company_name()
-            logger.info(f"Extracted company name: {company_name}")
+            logger.info(f"Extracted company name: {company_name} and listed exhange {listed_exchange}")
 
             # function that locates R3/R5/R7 (or best-match) and filters rows to the report year
             income, balance, cash, report_year = extract_financial_data(filing, ticker, target_year)
 
             if income and balance and cash:
                 logger.info(f"📦 Uploading {ticker} 10-K with report year {report_year} (filed in {filing_year})")
-                ok = upload_to_supabase(ticker, report_year, 0, income, balance, cash, company_name)
+                ok = upload_to_supabase(ticker, report_year, 0, income, balance, cash, company_name, listed_exchange)
                 return bool(ok)
             else:
                 logger.info(f"Missing statements for {ticker} (filing year {filing_year}); trying next year…")
@@ -148,8 +149,8 @@ def process_company_filing(ticker, target_year):
     return False
 
 def main():
-    tickers = ['MA']
-    years = [2021]
+    tickers = ['AMZN']
+    years = [2021,2022,2023,2024]
 
     results = {
         'successful': [],
