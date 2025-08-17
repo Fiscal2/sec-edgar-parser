@@ -24,9 +24,8 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash, company_nam
         
         # Check for duplicates
         logger.info(f"Checking for existing data: {ticker} {year} Q{quarter}")
-        existing_company_name = None
         existing = supabase.table("financials") \
-            .select("id") \
+            .select("id, company_name, listed_exchange") \
             .eq("ticker", ticker) \
             .eq("year", year) \
             .eq("quarter", quarter) \
@@ -34,15 +33,41 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash, company_nam
         
         if existing.data and len(existing.data) > 0:
             row = existing.data[0]
-            existing_company_name = row.get("company_name")
-            existing_listed_exchange = row.get("listed_exchange")
+            needs_update = False
+            payload = {}
 
-        # Skip only if both are already present
-        if existing_company_name and existing_listed_exchange:
-            logger.info(f"Skipping {ticker} Q{quarter} {year} — already in Supabase with company name and listed_exchange.")
-            return True
-        else:
+            # Only update if missing
+            if not row.get("company_name") and company_name:
+                payload["company_name"] = company_name.upper()
+                needs_update = True
+
+            if not row.get("listed_exchange") and listed_exchange:
+                payload["listed_exchange"] = listed_exchange
+                needs_update = True
+
+            # If nothing to update, skip entirely
+            if not needs_update:
+                logger.info(f"Skipping {ticker} Q{quarter} {year} — already has company_name and listed_exchange.")
+                return True
+
             logger.info("Existing record missing one or more fields — will update via upsert.")
+            result = supabase.table("financials").update(payload) \
+                .eq("ticker", ticker) \
+                .eq("year", year) \
+                .eq("quarter", quarter) \
+                .execute()
+
+            if result.data:
+                logger.info(f"✅ Successfully updated {ticker} Q{quarter} {year}")
+                return True
+            else:
+                logger.error(f"❌ Update failed for {ticker} Q{quarter} {year}")
+                return False
+            
+            # Insert path — validate inputs
+        if not all([ticker, year is not None, quarter is not None, income, balance, cash]):
+            logger.error(f"Missing required data for {ticker} {year} Q{quarter}")
+            return False
 
         
         # Validate data structure before JSON conversion
@@ -70,6 +95,9 @@ def upload_to_supabase(ticker, year, quarter, income, balance, cash, company_nam
 
         if listed_exchange:
             payload["listed_exchange"] = listed_exchange
+
+        # if company_website:
+        #     payload["company_website"] = company_website
 
         # Extract total revenue from income statement
         total_revenue = None
@@ -212,7 +240,7 @@ def get_existing_data(ticker, year, quarter):
         logger.error(f"Error fetching existing data for {ticker} {year} Q{quarter}: {e}")
         return None
 
-def update_existing_data(ticker, year, quarter, income, balance, cash, revenue_breakdown=None, listed_exchange=None):
+def update_existing_data(ticker, year, quarter, income, balance, cash, listed_exchange=None):
     """
     Update existing financial data in Supabase
     
@@ -225,9 +253,6 @@ def update_existing_data(ticker, year, quarter, income, balance, cash, revenue_b
             "balance_sheet": json.dumps(balance),
             "cash_flow": json.dumps(cash),
         }
-
-        if revenue_breakdown:
-            payload["revenue_breakdown"] = json.dumps(revenue_breakdown)
 
         if listed_exchange:
             payload["listed_exchange"] = json.dumps(listed_exchange)
@@ -249,45 +274,3 @@ def update_existing_data(ticker, year, quarter, income, balance, cash, revenue_b
     except Exception as e:
         logger.error(f"❌ Error updating {ticker} Q{quarter} {year}: {e}")
         return False
-
-# def get_revenue_breakdown_summary(ticker, year, quarter):
-#     """
-#     Get a summary of revenue breakdown for a specific company/year/quarter
-    
-#     Returns:
-#         dict: Summary of revenue breakdown data
-#     """
-#     try:
-#         result = supabase.table("financials") \
-#             .select("revenue_breakdown") \
-#             .eq("ticker", ticker) \
-#             .eq("year", year) \
-#             .eq("quarter", quarter) \
-#             .execute()
-        
-#         if result.data and len(result.data) > 0:
-#             revenue_data = result.data[0].get('revenue_breakdown')
-#             if revenue_data:
-#                 try:
-#                     parsed_data = json.loads(revenue_data)
-#                     return {
-#                         'ticker': ticker,
-#                         'year': year,
-#                         'quarter': quarter,
-#                         'extraction_method': parsed_data.get('extraction_method', 'unknown'),
-#                         'confidence_score': parsed_data.get('confidence_score', 0),
-#                         'revenue_categories': len(parsed_data.get('revenue_breakdown', {})),
-#                         'revenue_sources': len(parsed_data.get('revenue_sources', [])),
-#                         'top_revenue_sources': [
-#                             source.get('description', 'Unknown') 
-#                             for source in parsed_data.get('revenue_sources', [])[:5]
-#                         ]
-#                     }
-#                 except json.JSONDecodeError:
-#                     logger.error(f"Failed to parse revenue breakdown JSON for {ticker} {year} Q{quarter}")
-        
-#         return None
-        
-#     except Exception as e:
-#         logger.error(f"Error getting revenue breakdown summary for {ticker} {year} Q{quarter}: {e}")
-#         return None

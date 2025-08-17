@@ -5,6 +5,7 @@ Logic related to the handling of filings and documents
 # import re
 # import os
 import difflib
+import json
 import re
 from bs4 import BeautifulSoup
 import requests
@@ -17,7 +18,8 @@ from datetime import datetime
 import logging
 import gc
 from lxml import etree
-
+from urllib.parse import urlparse
+from typing import Optional, Any
 
 FILING_SUMMARY_FILE = 'FilingSummary.xml'
 
@@ -30,14 +32,17 @@ class Statements:
     # to add the appropriate ShortName from the FilingSummary.xml here.
     # TODO: perhaps add guessing/best match functionality to limit this list
     income_statements = ['consolidated statements of income',
+                    'consolidated results of operations',
                     'consolidated statement of income',
                     'consolidated income statements',
                     'consolidated statements of operations',
+                    'statements of consolidated operations',
                     'income statements',
                     'consolidated statement of operations',                    
                     'consolidated statement of earnings',
                     'consolidated statements of earnings',    
                     'consolidated statements of operations and comprehensive income (loss)',
+                    'consolidated statements of income (loss) and comprehensive income (loss)',
                     'consolidated statements of operations and comprehensive income',                
                     'condensed consolidated statements of income (unaudited)',
                     'condensed consolidated statements of income',
@@ -54,6 +59,8 @@ class Statements:
                     ]
     balance_sheets = ['consolidated balance sheets',
                     'consolidated balance sheet',
+                    'consolidated financial position',
+                    'consolidated statement of condition',
                     'consolidated statement of financial position',
                     'consolidated statements of financial position',
                     'condensed consolidated statement of financial position (current period unaudited)',
@@ -68,6 +75,7 @@ class Statements:
     cash_flows = ['consolidated statements of cash flows',
                     'consolidated statement of cash flows',
                     'consolidated statements of cash flows (unaudited)',
+                    'consolidated cash flow statement',
                     'condensed consolidated statements of cash flows (unaudited)',
                     'condensed consolidated statements of cash flows',
                     'condensed statements of cash flows',
@@ -112,7 +120,7 @@ class Filing:
         # not concerned with time/timezones
         self.date_filed = datetime.strptime(acceptance_datetime_text, '%Y%m%d')
 
-        print(f"Built {len(self.documents)} SGML documents (sample: {list(self.documents.keys())[:6]})")
+        #print(f"Built {len(self.documents)} SGML documents (sample: {list(self.documents.keys())[:6]})")
         self.text = None          # drop raw SGML text
         self.sgml = None          # drop parsed SGML tree
         gc.collect
@@ -295,7 +303,7 @@ class Filing:
             chosen = next(c for c in candidates if c["norm"] == best_any[0])
             return chosen["fn"]
 
-        print(f"could not find anything for ShortName {target!r}")
+        #print(f"could not find anything for ShortName {target!r}")
         return None
 
     
@@ -322,15 +330,43 @@ class Filing:
         except Exception as e:
             logger.error(f"Error extracting company name from SGML: {e}")
             return None
+        
 
-    def extract_listed_exchanges(self):
+    def extract_listed_exchanges(self) -> Optional[str]:
         """
         Extract only the Name of each exchange on which registered 
-        (dei:SecurityExchangeName) from the filing.
-
+        (dei:SecurityExchangeName) from the filing, normalized like the frontend exchangeLabel().
         Returns:
-            str or None: First exchange name found (as plain text), or None if not found
+            str or None: First standardized exchange name found, or None if not found.
         """
+        def normalize_exchange(raw: Any) -> Optional[str]:
+            # Flatten raw value like TS function
+            if isinstance(raw, list):
+                s = " ".join(map(str, raw))
+            elif isinstance(raw, str):
+                s = raw
+            elif raw is not None:
+                s = json.dumps(raw)
+            else:
+                s = ""
+
+            s_lower = s.lower()
+
+            if "nasdaq" in s_lower:
+                return "NASDAQ"
+            elif "new york stock exchange" in s_lower:
+                return "NYSE"
+            elif "nyse american" in s_lower or "nyse mkt" in s_lower:
+                return "NYSE American"
+            elif "arca" in s_lower:
+                return "NYSE Arca"
+            elif "cboe" in s_lower or "bats" in s_lower:
+                return "CBOE"
+            elif "otc" in s_lower:
+                return "OTC"
+            else:
+                return None
+
         seen = set()
 
         for doc in self.documents.values():
@@ -345,7 +381,10 @@ class Filing:
             for exch_tag in soup.find_all(attrs={"name": "dei:SecurityExchangeName"}):
                 name = exch_tag.get_text(strip=True)
                 if name and name not in seen:
-                    return name  # Return immediately as a string
+                    seen.add(name)
+                    normalized = normalize_exchange(name)
+                    if normalized:
+                        return normalized  # Return standardized exchange name immediately
 
             try:
                 del soup
@@ -353,6 +392,8 @@ class Filing:
                 pass
 
         return None  # If nothing found
+
+
 
     def debug_print_shortnames(self):
         """Print all <shortName> values in the FilingSummary.xml for this filing."""

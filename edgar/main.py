@@ -23,7 +23,7 @@ def parse_date_flexible(date_string):
         '%b %d, %Y', 
         '%b. %d, %Y',
         '%d %b %Y', 
-        '%d %B %Y'
+        '%d %B %Y',
     ]
 
     for pattern in date_patterns:
@@ -117,10 +117,14 @@ def process_company_filing(ticker, target_year):
     stock = Stock(ticker)
 
     for filing_year in (target_year, target_year + 1):
+        company_name = None
+        listed_exchange = None
         try:
             filing = stock.get_filing('annual', filing_year, 4)
+            #filing.debug_print_shortnames() 
             try:
                 listed_exchange = filing.extract_listed_exchanges()
+                # company_website = filing.extract_company_website()
                 filing.prepare_for_parsing()
             except Exception as e:
                 logger.warning(f"Prune skipped (no summary?): {e}")
@@ -130,7 +134,7 @@ def process_company_filing(ticker, target_year):
 
         try:
             company_name = filing.extract_company_name()
-            logger.info(f"Extracted company name: {company_name} and listed exhange {listed_exchange}")
+            logger.info(f"Extracted company name: {company_name}, listed exhange {listed_exchange}")
 
             # function that locates R3/R5/R7 (or best-match) and filters rows to the report year
             income, balance, cash, report_year = extract_financial_data(filing, ticker, target_year)
@@ -149,8 +153,8 @@ def process_company_filing(ticker, target_year):
     return False
 
 def main():
-    tickers = ['AMZN']
-    years = [2021,2022,2023,2024]
+    tickers = ['LVS']
+    years = [2021]
 
     results = {
         'successful': [],
