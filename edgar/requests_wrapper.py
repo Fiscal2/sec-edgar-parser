@@ -3,8 +3,10 @@ import os
 import requests
 
 HEADERS = {
-    "User-Agent": "Zac G zacharyross3@gmail.com",  # use real contact email
+    "User-Agent": "Zac G zacharyross3@gmail.com",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Encoding": "gzip, deflate",
+    "Connection": "keep-alive",
     "Host": "www.sec.gov"
 }
 

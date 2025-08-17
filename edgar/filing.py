@@ -113,6 +113,10 @@ class Filing:
         self.date_filed = datetime.strptime(acceptance_datetime_text, '%Y%m%d')
 
         print(f"Built {len(self.documents)} SGML documents (sample: {list(self.documents.keys())[:6]})")
+        if FILING_SUMMARY_FILE in self.documents:
+            print(f"FilingSummary.xml found: {self.documents[FILING_SUMMARY_FILE].doc_text.xml}")
+        else:
+            print(f"FilingSummary.xml NOT found in documents")
         self.text = None          # drop raw SGML text
         self.sgml = None          # drop parsed SGML tree
         gc.collect

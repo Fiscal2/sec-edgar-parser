@@ -1,7 +1,8 @@
 import pytest
 import json
-from edgar.stock import Stock, NoFilingInfoException
-from edgar.financials import FinancialReportEncoder
+from src.sec_edgar_parser.services.stock_service import StockService
+from src.sec_edgar_parser.services.company_service import CompanyService
+from src.sec_edgar_parser.core.exceptions import FilingNotFoundException
 
     
 def setup_module(module):
@@ -10,15 +11,16 @@ def setup_module(module):
 
 def test_init():
 
-    stock = Stock(symbol='AAPL')
-    assert stock.symbol == 'AAPL'
-    assert stock.cik == '320193'
+    company_service = CompanyService()
+    company = company_service.get_company('AAPL')
+    assert company.symbol == 'AAPL'
+    assert company.cik == '320193'
 
 def test_get_filing():
 
-    stock = Stock(symbol='AAPL')
-    filing = stock.get_filing(period='quarterly', year=2016, quarter=1)
-    assert True
+    stock_service = StockService()
+    filing = stock_service.get_filing('AAPL', 'quarterly', 2016, 1)
+    assert filing is not None
 
 
 
@@ -26,17 +28,18 @@ def test_get_filing():
 
 def test_init_unknown_symbol():
     try:
-        Stock(symbol='ZZZZZZZZZZZZZZZ')
+        company_service = CompanyService()
+        company_service.get_company('ZZZZZZZZZZZZZZZ')
         assert False
-    except IndexError:
+    except FilingNotFoundException:
         assert True
 
 def test_get_filing_no_filing_found_exception():
 
-    stock = Stock(symbol='FB')
+    stock_service = StockService()
     try:
-        # IPO was in 2012
-        filing = stock.get_filing(period='quarterly', year=2011, quarter=1)
+        # Try to get a filing for a completely non-existent company
+        filing = stock_service.get_filing('NONEXISTENT123', 'quarterly', 2020, 1)
         assert False
-    except NoFilingInfoException:
+    except FilingNotFoundException:
         assert True

@@ -1,26 +1,26 @@
 # ASGI app
-fastapi==0.115.0
-pydantic==2.8.2
-uvicorn==0.30.6
-starlette==0.38.6
+fastapi>=0.115.0
+pydantic>=2.8.2
+uvicorn>=0.30.6
+starlette>=0.38.6
 
 # HTTP clients
-requests==2.32.3 
+requests>=2.32.3 
 
 # Parsing / HTML / XML
-beautifulsoup4==4.12.3
-lxml==5.3.0
+beautifulsoup4>=4.12.3
+lxml>=5.3.0
 
 # Data handling
-pandas==2.2.2
-numpy==2.0.1
-python-dateutil==2.9.0.post0
-tzdata==2024.1
-pytz==2025.2
+pandas>=2.1.0
+numpy>=1.26.0
+python-dateutil>=2.9.0.post0
+tzdata>=2024.1
+pytz>=2025.2
 
 # Supabase client
-supabase==2.7.0
+supabase>=2.7.0
 
 # Environment variables
-python-dotenv==1.0.1
+python-dotenv>=1.0.1
 
