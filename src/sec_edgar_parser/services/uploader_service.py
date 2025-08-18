@@ -1,3 +1,4 @@
+import json
 from typing import Optional, Dict, Any
 from src.sec_edgar_parser.core.supabase_client import get_supabase
 
@@ -20,12 +21,15 @@ class UploadService:
             "ticker": ticker,
             "year": year,
             "quarter": quarter,
-            "income_statement": income,
-            "balance_sheet": balance,
-            "cash_flow": cash,
+            "income_statement": json.dumps(income),
+            "balance_sheet": json.dumps(balance),
+            "cash_flow": json.dumps(cash),
             "company_name": company_name,
-            "listed_exchange": listed_exchange,
         }
+        
+        if listed_exchange:
+            payload["listed_exchange"] = json.dumps(listed_exchange)
+        
         # Use upsert with a composite unique key if you have one
         return (
             self.client.table("financials")

@@ -4,7 +4,7 @@ from datetime import datetime
 
 from ..core.models import Company, FinancialStatement
 from ..core.exceptions import FilingNotFoundException
-from ..utils.date_utils import format_date_for_display
+from ..utils.date_utils import format_date_for_display, convert_datetime_to_iso
 from .stock_service import StockService
 from .filing_service import FilingService
 from .uploader_service import UploadService
@@ -177,28 +177,46 @@ class MainService:
                     for key, value in item_dict.items():
                         if hasattr(value, '__dict__'):
                             item_dict[key] = str(value)
+                        elif isinstance(value, datetime):
+                            item_dict[key] = value.isoformat()
                         elif not isinstance(value, (str, int, float, bool, type(None))):
                             item_dict[key] = str(value)
                     reports.append(item_dict)
                 elif isinstance(item, dict):
-                    if 'date' in item:
+                    processed_item = {}
+                    for key, value in item.items():
+                        if isinstance(value, datetime):
+                            processed_item[key] = value.isoformat()
+                        else:
+                            processed_item[key] = value
+                    
+                    if 'date' in processed_item:
                         try:
-                            item_date = datetime.strptime(item['date'], '%Y-%m-%d')
+                            if isinstance(processed_item['date'], str):
+                                item_date = datetime.strptime(processed_item['date'], '%Y-%m-%d')
+                            else:
+                                item_date = processed_item['date']
+                            
                             if item_date.year == target_year:
-                                reports.append(item)
+                                reports.append(processed_item)
                         except (ValueError, TypeError):
-                            reports.append(item)
+                            reports.append(processed_item)
                     else:
-                        reports.append(item)
+                        reports.append(processed_item)
                 else:
                     reports.append(str(item))
             
             if not reports:
                 return None
             
+            # Get date_filed and convert to string if it's a datetime object
+            date_filed = getattr(financial_report, 'date_filed', 'Unknown')
+            if isinstance(date_filed, datetime):
+                date_filed = date_filed.isoformat()
+            
             return {
                 'company': getattr(financial_report, 'company', 'Unknown'),
-                'date_filed': getattr(financial_report, 'date_filed', 'Unknown'),
+                'date_filed': date_filed,
                 'reports': reports,
                 'report_year': target_year
             }
@@ -216,7 +234,7 @@ class MainService:
         for period in statement.periods:
             if period.date.year == target_year:
                 legacy_period = {
-                    'date': format_date_for_display(period.date),
+                    'date': period.date.isoformat(),  # Convert datetime to ISO string
                     'months': period.months,
                     'map': {}
                 }
@@ -234,7 +252,7 @@ class MainService:
         
         return {
             'company': statement.company,
-            'date_filed': format_date_for_display(statement.date_filed),
+            'date_filed': statement.date_filed.isoformat(),  # Convert datetime to ISO string
             'reports': filtered_periods,
             'report_year': target_year
         }
