@@ -3,6 +3,8 @@ from pydantic_settings import BaseSettings
 from pydantic import Field
 
 class Settings(BaseSettings):
+    supabase_url: str = Field(..., alias="SUPABASE_URL")
+    supabase_key: str = Field(..., alias="SUPABASE_KEY")
     edgar_base_url: str = "https://www.sec.gov/Archives/"
     edgar_index_url: str = "https://www.sec.gov/Archives/edgar/full-index/"
     request_timeout: int = 30

@@ -7,6 +7,7 @@ from ..core.exceptions import FilingNotFoundException
 from ..utils.date_utils import format_date_for_display
 from .stock_service import StockService
 from .filing_service import FilingService
+from .uploader_service import UploadService
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,7 @@ class MainService:
     def __init__(self):
         self.stock_service = StockService()
         self.filing_service = FilingService()
+        self.upload_service = UploadService()
     
     def process_company_filing(self, ticker: str, target_year: int) -> Dict[str, Any]:
         """
@@ -43,6 +45,21 @@ class MainService:
                     
                     if income and balance and cash:
                         logger.info(f"📦 Successfully parsed {ticker} 10-K with report year {report_year} (filed in {filing_year})")
+
+                        try:
+                            self.upload_service.upsert_financials(
+                                ticker=ticker,
+                                year=report_year,           # use the computed report year
+                                quarter=0,                  # or 4 for annual; match your schema
+                                income=income,
+                                balance=balance,
+                                cash=cash,
+                                company_name=company_name,
+                                listed_exchange=listed_exchange,
+                            )
+                            logger.info(f"⬆️ Uploaded {ticker} {report_year} to Supabase")
+                        except Exception as e:
+                            logger.warning(f"Upload to Supabase failed for {ticker} {report_year}: {e}")
                         
                         return {
                             'success': True,

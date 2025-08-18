@@ -24,3 +24,7 @@ supabase>=2.7.0
 # Environment variables
 python-dotenv>=1.0.1
 
+
+pydantic-settings>=2.0
+
+

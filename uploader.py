@@ -1,5 +1,5 @@
 import requests
-from supabase_client import supabase
+from src.sec_edgar_parser.core.supabase_client import supabase
 import json
 import time
 import logging
