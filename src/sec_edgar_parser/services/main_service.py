@@ -2,9 +2,8 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 
-from ..core.models import Company, FinancialStatement
+from ..core.models import FinancialStatement
 from ..core.exceptions import FilingNotFoundException
-from ..utils.date_utils import format_date_for_display, convert_datetime_to_iso
 from .stock_service import StockService
 from .filing_service import FilingService
 from .uploader_service import UploadService
@@ -46,6 +45,8 @@ class MainService:
                     if income and balance and cash:
                         logger.info(f"📦 Successfully parsed {ticker} 10-K with report year {report_year} (filed in {filing_year})")
 
+                        total_revenue = self._extract_total_revenue(income, report_year)
+                       
                         try:
                             self.upload_service.upsert_financials(
                                 ticker=ticker,
@@ -56,6 +57,7 @@ class MainService:
                                 cash=cash,
                                 company_name=company_name,
                                 listed_exchange=listed_exchange,
+                                total_revenue=total_revenue,
                             )
                             logger.info(f"⬆️ Uploaded {ticker} {report_year} to Supabase")
                         except Exception as e:
@@ -71,6 +73,7 @@ class MainService:
                             'income_statement': income,
                             'balance_sheet': balance,
                             'cash_flow': cash,
+                            'total_revenue': total_revenue,
                             'message': f"Successfully processed {ticker} for {report_year}"
                         }
                     else:
@@ -153,6 +156,47 @@ class MainService:
             logger.error(f"Error extracting financial data for {ticker} {target_year}: {e}")
             return None, None, None, None
     
+    def _extract_total_revenue(self, income_data: Dict[str, Any], target_year: int) -> Optional[float]:
+        """Extract total revenue from income statement data for a specific year"""
+        if not income_data or 'reports' not in income_data:
+            return None
+            
+        reports = income_data.get('reports', [])
+        if not reports:
+            return None
+            
+        for report in reports:
+            if not isinstance(report, dict):
+                continue
+                
+            report_date = report.get('date', '')
+            if not report_date:
+                continue
+                
+            if str(target_year) in str(report_date):
+                map_data = report.get('map', {})
+                if not map_data:
+                    continue
+                    
+                revenue_labels = [
+                    'total revenue', 'net sales', 'total net sales', 
+                    'revenue', 'total revenues', 'consolidated revenue'
+                ]
+                
+                for label in revenue_labels:
+                    if label in map_data:
+                        revenue_value = map_data[label].get('value')
+                        if revenue_value is not None:
+                            try:
+                                # Convert to float if string
+                                if isinstance(revenue_value, str):
+                                    revenue_value = float(revenue_value.replace(',', ''))
+                                return float(revenue_value)
+                            except (ValueError, TypeError):
+                                continue
+                                
+        return None
+
     def _convert_old_financial_report(self, financial_report, target_year: int) -> Optional[Dict[str, Any]]:
         """Convert old FinancialReport object to legacy format for backward compatibility"""
         if not financial_report:
