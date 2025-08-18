@@ -153,7 +153,7 @@ def process_company_filing(ticker, target_year):
     return False
 
 def main():
-    tickers = ['LVS']
+    tickers = ['EOG']
     years = [2021]
 
     results = {
