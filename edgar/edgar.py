@@ -99,14 +99,11 @@ def get_index_json(year='', quarter=''):
         from index.json
     '''
     url = FULL_INDEX_URL+year+quarter+INDEX_JSON
-    # print('getting data at '+url)
 
     response = GetRequest(url).response
     text = response.text
 
     json_text = json.loads(text)
-    #print(text)
-    #print(json['directory']['item'][0]['href'])
     return json_text
 
 
@@ -211,7 +208,7 @@ def _get_filing_info(cik='', forms=[], year='', quarter=''):
 
     # using master.idx so it's sorted by cik and we can use binary search
     url = '{}{}{}{}'.format(FULL_INDEX_URL, year, quarter, MASTER_IDX)
-    print('getting {} filing info from {}'.format(forms, url))
+    #print('getting {} filing info from {}'.format(forms, url))
 
     response = GetRequest(url).response
     text = response.text

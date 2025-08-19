@@ -4,7 +4,7 @@ Server for running the SEC EDGAR Parser API.
 """
 
 import uvicorn
-from .api.main import create_app
+from src.sec_edgar_parser.api.main import create_app
 
 if __name__ == "__main__":
     app = create_app()
@@ -13,6 +13,5 @@ if __name__ == "__main__":
         app,
         host="0.0.0.0",
         port=8000,
-        log_level="info",
-        reload=True
+        log_level="info"
     )

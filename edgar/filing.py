@@ -112,7 +112,7 @@ class Filing:
         # not concerned with time/timezones
         self.date_filed = datetime.strptime(acceptance_datetime_text, '%Y%m%d')
 
-        print(f"Built {len(self.documents)} SGML documents (sample: {list(self.documents.keys())[:6]})")
+        #print(f"Built {len(self.documents)} SGML documents (sample: {list(self.documents.keys())[:6]})")
         if FILING_SUMMARY_FILE in self.documents:
             print(f"FilingSummary.xml found: {self.documents[FILING_SUMMARY_FILE].doc_text.xml}")
         else:
@@ -171,7 +171,7 @@ class Filing:
         financial_data = []
 
         for short_name, filename in self._get_statement(statement_short_names):
-            print(f'Getting financial data for {short_name} (filename: {filename})')
+            #print(f'Getting financial data for {short_name} (filename: {filename})')
 
             # 1) Safe document lookup
             doc = self.documents.get(filename)
@@ -357,21 +357,6 @@ class Filing:
                 pass
 
         return None  # If nothing found
-
-    def debug_print_shortnames(self):
-        """Print all <shortName> values in the FilingSummary.xml for this filing."""
-        if FILING_SUMMARY_FILE not in self.documents:
-            print("No FilingSummary.xml found.")
-            return
-
-        xml = self.documents[FILING_SUMMARY_FILE].doc_text.xml
-        print(f"\nAvailable ShortNames in {self.company or self.url}:")
-        for rpt in xml.find_all("report"):
-            sn = rpt.find("shortname")
-            if sn and sn.get_text(strip=True):
-                print("  •", sn.get_text(strip=True))
-        print()
-
 
     def get_income_statements(self):
         return self._get_financial_data(self.STATEMENTS.income_statements, False)

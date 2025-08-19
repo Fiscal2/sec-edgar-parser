@@ -82,7 +82,6 @@ class FilingService:
                         name = re.sub(r'\s+', ' ', text)
                         name = re.sub(r'[^\w\s\-&.,]', '', name)
                         if name:
-                            logger.debug(f"Extracted company name: {name}")
                             return name
             
             return None
@@ -110,7 +109,6 @@ class FilingService:
                 if match:
                     exchange = match.group(1).strip()
                     if exchange:
-                        logger.debug(f"Extracted exchange: {exchange}")
                         return exchange
             
             return None
@@ -136,7 +134,6 @@ class FilingService:
                 if match:
                     form_type = match.group(1).strip()
                     if form_type:
-                        logger.debug(f"Extracted form type: {form_type}")
                         return form_type
             
             return None

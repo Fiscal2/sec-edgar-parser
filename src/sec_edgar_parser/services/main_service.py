@@ -19,32 +19,18 @@ class MainService:
         self.upload_service = UploadService()
     
     def process_company_filing(self, ticker: str, target_year: int) -> Dict[str, Any]:
-        """
-        Process a company filing for a specific year.
-            
-        Returns:
-            Dictionary containing processing results
-        """
-        logger.info(f"Processing {ticker} 10-K targeting report year {target_year}")
-        
+        """Process a company's filing for a specific year"""
         try:
-            company = self.stock_service.get_company(ticker)
-            logger.info(f"Found company: {company.name or company.symbol} (CIK: {company.cik})")
-            
-            for filing_year in (target_year, target_year + 1):
+            # Try filing years: target_year and target_year + 1
+            for filing_year in [target_year, target_year + 1]:
                 try:
                     filing = self.stock_service.get_filing(ticker, 'annual', filing_year, 0)
-                    
                     company_name = filing.extract_company_name()
                     listed_exchange = filing.extract_listed_exchanges()
-                    
-                    logger.info(f"Extracted company name: {company_name} and listed exchange {listed_exchange}")
                     
                     income, balance, cash, report_year = self._extract_financial_data(filing, ticker, target_year)
                     
                     if income and balance and cash:
-                        logger.info(f"📦 Successfully parsed {ticker} 10-K with report year {report_year} (filed in {filing_year})")
-
                         total_revenue = self._extract_total_revenue(income, report_year)
                        
                         try:
@@ -76,15 +62,12 @@ class MainService:
                             'total_revenue': total_revenue,
                             'message': f"Successfully processed {ticker} for {report_year}"
                         }
-                    else:
-                        logger.info(f"Missing statements for {ticker} (filing year {filing_year}); trying next year...")
                         
                 except FilingNotFoundException:
-                    logger.warning(f"No 10-K found for {ticker} in {filing_year}")
                     continue
                 except Exception as e:
                     logger.warning(f"Error processing {ticker} for {filing_year}: {e}")
-                    continue
+                    break
             
             error_msg = f"No 10-K with report year {target_year} found for {ticker}"
             logger.error(error_msg)
@@ -117,10 +100,6 @@ class MainService:
             Tuple of (income_data, balance_data, cash_data, report_year)
         """
         try:
-            logger.info(f"Checking reports for {ticker} in year: {target_year}")
-            logger.info(f"Getting financial statements from filing: {filing.url}")
-            logger.info(f"Filing documents: {list(filing.documents.keys()) if hasattr(filing, 'documents') else 'No documents'}")
-            
             income = filing.get_income_statements()
             balance = filing.get_balance_sheets()
             cash = filing.get_cash_flows()
@@ -138,13 +117,6 @@ class MainService:
                     income_data.get('report_year', target_year),
                     balance_data.get('report_year', target_year),
                     cash_data.get('report_year', target_year)
-                )
-                
-                logger.info(
-                    f"Filtered data counts for year {target_year} — "
-                    f"Income: {len(income_data.get('reports', []))}, "
-                    f"Balance: {len(balance_data.get('reports', []))}, "
-                    f"Cash: {len(cash_data.get('reports', []))}"
                 )
                 
                 return income_data, balance_data, cash_data, report_year
@@ -177,6 +149,31 @@ class MainService:
                 map_data = report.get('map', {})
                 if not map_data:
                     continue
+                
+                # Case where map_data might be a string
+                if isinstance(map_data, str):
+                    try:
+                        import ast
+                        map_data = ast.literal_eval(map_data)
+                    except (ValueError, SyntaxError):
+                        revenue_labels = [
+                            'total revenue', 'net sales', 'total net sales', 
+                            'revenue', 'total revenues', 'consolidated revenue'
+                        ]
+                        for label in revenue_labels:
+                            if label in map_data.lower():
+                                import re
+                                pattern = rf'{label}.*?(\d+(?:,\d+)*(?:\.\d+)?)'
+                                match = re.search(pattern, map_data.lower())
+                                if match:
+                                    try:
+                                        return float(match.group(1).replace(',', ''))
+                                    except (ValueError, TypeError):
+                                        continue
+                        continue
+                
+                if not isinstance(map_data, dict):
+                    continue
                     
                 revenue_labels = [
                     'total revenue', 'net sales', 'total net sales', 
@@ -185,10 +182,18 @@ class MainService:
                 
                 for label in revenue_labels:
                     if label in map_data:
-                        revenue_value = map_data[label].get('value')
+                        revenue_item = map_data[label]
+                        
+                        # Case where revenue_item might be a string or dict
+                        if isinstance(revenue_item, dict):
+                            revenue_value = revenue_item.get('value')
+                        elif isinstance(revenue_item, (str, int, float)):
+                            revenue_value = revenue_item
+                        else:
+                            continue
+                            
                         if revenue_value is not None:
                             try:
-                                # Convert to float if string
                                 if isinstance(revenue_value, str):
                                     revenue_value = float(revenue_value.replace(',', ''))
                                 return float(revenue_value)
@@ -207,63 +212,109 @@ class MainService:
             elif hasattr(financial_report, 'data'):
                 raw_reports = financial_report.data
             else:
-                logger.warning(f"Unknown FinancialReport structure for {target_year}")
+                logger.warning(f"No reports or data attribute found on financial_report")
                 return None
             
             if not raw_reports:
                 return None
             
-            # Convert FinancialInfo objects to plain dictionaries
-            reports = []
+            # First pass: filter reports by year using datetime objects
+            filtered_reports = []
             for item in raw_reports:
-                if hasattr(item, '__dict__'):
-                    item_dict = item.__dict__.copy()
-                    for key, value in item_dict.items():
-                        if hasattr(value, '__dict__'):
-                            item_dict[key] = str(value)
-                        elif isinstance(value, datetime):
-                            item_dict[key] = value.isoformat()
-                        elif not isinstance(value, (str, int, float, bool, type(None))):
-                            item_dict[key] = str(value)
-                    reports.append(item_dict)
-                elif isinstance(item, dict):
-                    processed_item = {}
-                    for key, value in item.items():
-                        if isinstance(value, datetime):
-                            processed_item[key] = value.isoformat()
+                try:
+                    if hasattr(item, '__dict__'):
+                        # Handle object with __dict__
+                        item_dict = item.__dict__.copy()
+                        item_date = item_dict.get('date')
+                        
+                        # Check if this report is for the target year or next year
+                        if isinstance(item_date, datetime):
+                            if item_date.year in [target_year, target_year + 1]:
+                                filtered_reports.append(item)
+                        elif isinstance(item_date, str):
+                            # Try to parse string date
+                            try:
+                                parsed_date = datetime.strptime(item_date, '%Y-%m-%d')
+                                if parsed_date.year in [target_year, target_year + 1]:
+                                    filtered_reports.append(item)
+                            except ValueError:
+                                # If parsing fails, check if year string is in the date
+                                if str(target_year) in item_date or str(target_year + 1) in item_date:
+                                    filtered_reports.append(item)
                         else:
-                            processed_item[key] = value
-                    
-                    if 'date' in processed_item:
-                        try:
-                            if isinstance(processed_item['date'], str):
-                                item_date = datetime.strptime(processed_item['date'], '%Y-%m-%d')
-                            else:
-                                item_date = processed_item['date']
+                            # If no date or can't parse, include it to be safe
+                            filtered_reports.append(item)
                             
-                            if item_date.year == target_year:
-                                reports.append(processed_item)
-                        except (ValueError, TypeError):
-                            reports.append(processed_item)
+                    elif isinstance(item, dict):
+                        # Handle dictionary items
+                        item_date = item.get('date')
+                        
+                        if item_date:
+                            if isinstance(item_date, datetime):
+                                if item_date.year in [target_year, target_year + 1]:
+                                    filtered_reports.append(item)
+                            elif isinstance(item_date, str):
+                                try:
+                                    parsed_date = datetime.strptime(item_date, '%Y-%m-%d')
+                                    if parsed_date.year in [target_year, target_year + 1]:
+                                        filtered_reports.append(item)
+                                except ValueError:
+                                    if str(target_year) in item_date or str(target_year + 1) in item_date:
+                                        filtered_reports.append(item)
+                        else:
+                            # No date field, include it
+                            filtered_reports.append(item)
                     else:
-                        reports.append(processed_item)
-                else:
-                    reports.append(str(item))
+                        # Not a dict or object, include it
+                        filtered_reports.append(item)
+                except Exception as e:
+                    logger.warning(f"Error processing item in _convert_old_financial_report: {e}")
+                    continue
             
-            if not reports:
+            if not filtered_reports:
                 return None
+            
+            # Second pass: convert filtered reports to JSON-serializable format
+            reports = []
+            for item in filtered_reports:
+                try:
+                    if hasattr(item, '__dict__'):
+                        item_dict = item.__dict__.copy()
+                        for key, value in item_dict.items():
+                            if hasattr(value, '__dict__'):
+                                item_dict[key] = str(value)
+                            elif isinstance(value, datetime):
+                                item_dict[key] = value.isoformat()
+                            elif not isinstance(value, (str, int, float, bool, type(None))):
+                                item_dict[key] = str(value)
+                        reports.append(item_dict)
+                    elif isinstance(item, dict):
+                        processed_item = {}
+                        for key, value in item.items():
+                            if isinstance(value, datetime):
+                                processed_item[key] = value.isoformat()
+                            else:
+                                processed_item[key] = value
+                        reports.append(processed_item)
+                    else:
+                        reports.append(str(item))
+                except Exception as e:
+                    logger.warning(f"Error converting item to JSON format: {e}")
+                    continue
             
             # Get date_filed and convert to string if it's a datetime object
             date_filed = getattr(financial_report, 'date_filed', 'Unknown')
             if isinstance(date_filed, datetime):
                 date_filed = date_filed.isoformat()
             
-            return {
+            result = {
                 'company': getattr(financial_report, 'company', 'Unknown'),
                 'date_filed': date_filed,
                 'reports': reports,
                 'report_year': target_year
             }
+            
+            return result
             
         except Exception as e:
             logger.error(f"Error converting old FinancialReport: {e}")
