@@ -308,10 +308,8 @@ class MainService:
                 date_filed = date_filed.isoformat()
             
             result = {
-                'company': getattr(financial_report, 'company', 'Unknown'),
                 'date_filed': date_filed,
                 'reports': reports,
-                'report_year': target_year
             }
             
             return result
@@ -346,10 +344,8 @@ class MainService:
             return None
         
         return {
-            'company': statement.company,
             'date_filed': statement.date_filed.isoformat(),  # Convert datetime to ISO string
             'reports': filtered_periods,
-            'report_year': target_year
         }
     
     def process_multiple_companies(self, tickers: List[str], years: List[int]) -> Dict[str, Any]:
