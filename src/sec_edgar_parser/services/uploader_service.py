@@ -1,6 +1,8 @@
 import json
 import time
 import logging
+from datetime import datetime
+from decimal import Decimal
 from typing import Optional, Dict, Any
 from src.sec_edgar_parser.core.supabase_client import get_supabase
 
@@ -9,6 +11,82 @@ logger = logging.getLogger(__name__)
 class UploadService:
     def __init__(self, client=None):
         self.client = client or get_supabase()
+    
+    def _to_jsonable(self, obj):
+        """
+        Recursively convert obj into JSON-serializable types.
+        Handles datetimes, Decimals, sets/tuples, and common custom object patterns
+        (e.g., objects with .label / .value, or just .value).
+        """
+        # Primitives
+        if obj is None or isinstance(obj, (str, int, float, bool)):
+            return obj
+
+        # Common numeric types
+        if isinstance(obj, Decimal):
+            return float(obj)
+
+        # Datetime
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+
+        # Dict / Mapping
+        if isinstance(obj, dict):
+            # Ensure keys are strings; sanitize values
+            return {str(k): self._to_jsonable(v) for k, v in obj.items()}
+
+        # Iterables
+        if isinstance(obj, (list, tuple, set)):
+            return [self._to_jsonable(v) for v in obj]
+
+        # Common "metric-like" objects
+        # If it looks like it has a 'value', return that
+        for attr in ("value", "amount", "val"):
+            if hasattr(obj, attr):
+                return self._to_jsonable(getattr(obj, attr))
+
+        # If it has both label and value, return a small dict
+        if hasattr(obj, "label") and hasattr(obj, "value"):
+            try:
+                return {
+                    "label": self._to_jsonable(getattr(obj, "label")),
+                    "value": self._to_jsonable(getattr(obj, "value")),
+                }
+            except Exception:
+                # fall through to string fallback
+                pass
+
+        # Last resort: string representation
+        return str(obj)
+
+    def _strip_unwanted_keys(self, obj):
+        """
+        Remove keys we don't want stored inside the statement blobs.
+        Currently drops 'company' wherever found.
+        """
+        if isinstance(obj, dict):
+            obj.pop("company", None)
+            for k, v in list(obj.items()):
+                obj[k] = self._strip_unwanted_keys(v)
+            return obj
+        if isinstance(obj, list):
+            return [self._strip_unwanted_keys(v) for v in obj]
+        return obj
+
+    def _clean_statement_blob(self, blob):
+        """
+        Strip unwanted keys, then convert everything to JSON-safe primitives.
+        """
+        # Make a shallow copy so we don't mutate caller refs
+        safe = blob
+        try:
+            # strip keys
+            safe = self._strip_unwanted_keys(safe)
+            # convert to jsonable
+            safe = self._to_jsonable(safe)
+        except Exception as e:
+            logger.warning(f"Sanitization warning: {e}")
+        return safe
 
     def upsert_financials(
         self,
@@ -45,11 +123,15 @@ class UploadService:
                 else:
                     logger.info("Existing record missing one or more fields — will update via upsert.")
 
+            income_clean  = self._clean_statement_blob(income)
+            balance_clean = self._clean_statement_blob(balance)
+            cash_clean    = self._clean_statement_blob(cash)
+
             # Validate data structure before JSON conversion
             try:
-                json.dumps(income)
-                json.dumps(balance)
-                json.dumps(cash)
+                json.dumps(income_clean)
+                json.dumps(balance_clean)
+                json.dumps(cash_clean)
             except (TypeError, ValueError) as e:
                 logger.error(f"Data serialization error for {ticker} {year} Q{quarter}: {e}")
                 raise ValueError(f"Data serialization error: {e}")
@@ -59,9 +141,9 @@ class UploadService:
                 "ticker": ticker,
                 "year": year,
                 "quarter": quarter,
-                "income_statement": json.dumps(income),
-                "balance_sheet": json.dumps(balance),
-                "cash_flow": json.dumps(cash),
+                "income_statement": json.dumps(income_clean),
+                "balance_sheet": json.dumps(balance_clean),
+                "cash_flow": json.dumps(cash_clean),
             }
 
             if company_name:

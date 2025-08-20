@@ -1,6 +1,10 @@
+import ast
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
+from dataclasses import dataclass
+import re
+
 
 from ..core.models import FinancialStatement
 from ..core.exceptions import FilingNotFoundException
@@ -10,6 +14,113 @@ from .uploader_service import UploadService
 
 logger = logging.getLogger(__name__)
 
+def _parse_date_any(s: Any) -> Optional[datetime]:
+    """Best-effort parsing for ISO, 'YYYY-MM-DDTHH:MM:SS', 'Dec 31, 2021', etc."""
+    if isinstance(s, datetime):
+        return s
+    if not s or not isinstance(s, str):
+        return None
+    s = s.strip().replace('Z', '')
+    # Try ISO first
+    try:
+        return datetime.fromisoformat(s)
+    except Exception:
+        pass
+    # Try common formats
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%b %d, %Y", "%b. %d, %Y", "%B %d, %Y", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(s, fmt)
+        except Exception:
+            continue
+    # Last resort: extract a year and assume Dec 31
+    m = re.search(r"(\d{4})", s)
+    if m:
+        try:
+            return datetime(int(m.group(1)), 12, 31)
+        except Exception:
+            return None
+    return None
+
+@dataclass
+class _MetricAdapter:
+    label: str
+    value: Any
+
+class _LegacyPeriodAdapter:
+    """Wrap a legacy report item into a period with .date, .months, .metrics."""
+    __slots__ = ("date", "months", "metrics")
+
+    def __init__(self, item: Dict[str, Any]):
+        # date
+        self.date: datetime = _parse_date_any(item.get("date")) or datetime(1900, 1, 1)
+        # months
+        self.months: Optional[int] = item.get("months")
+        # metrics
+        self.metrics: Dict[str, _MetricAdapter] = {}
+
+        raw_map = item.get("map", {})
+        if isinstance(raw_map, str):
+            # Sometimes legacy map is stored as a Python-dict string
+            try:
+                raw_map = ast.literal_eval(raw_map)
+            except Exception:
+                raw_map = {}
+
+        if isinstance(raw_map, dict):
+            for key, val in raw_map.items():
+                if isinstance(val, dict):
+                    label = val.get("label", key)
+                    v = val.get("value", None)
+                else:
+                    # If it’s not a dict, store directly
+                    label = str(key)
+                    v = val
+                self.metrics[key] = _MetricAdapter(label=label, value=v)
+
+class _LegacyStatementAdapter:
+    """
+    Turn a legacy FinancialReport-like object into a FinancialStatement-like one.
+    Exposes .periods (list of _LegacyPeriodAdapter) and .date_filed (datetime or 'Unknown').
+    """
+    __slots__ = ("periods", "date_filed")
+
+    def __init__(self, src: Any):
+        # get list of report items
+        reports: List[Dict[str, Any]] = []
+        if isinstance(src, dict) and "reports" in src:
+            reports = src.get("reports") or []
+            df = src.get("date_filed", "Unknown")
+        elif hasattr(src, "reports"):
+            reports = getattr(src, "reports") or []
+            df = getattr(src, "date_filed", "Unknown")
+        elif hasattr(src, "data"):
+            reports = getattr(src, "data") or []
+            df = getattr(src, "date_filed", "Unknown")
+        else:
+            df = "Unknown"
+
+        self.periods: List[_LegacyPeriodAdapter] = []
+        for item in reports:
+            if isinstance(item, dict):
+                p = _LegacyPeriodAdapter(item)
+                # drop periods that completely fail to parse date
+                if p.date.year != 1900:
+                    self.periods.append(p)
+            elif hasattr(item, "__dict__"):
+                # Convert object-like to dict, then adapt
+                d = {}
+                for k, v in item.__dict__.items():
+                    if k.startswith("_") or callable(v):
+                        continue
+                    d[k] = v
+                p = _LegacyPeriodAdapter(d)
+                if p.date.year != 1900:
+                    self.periods.append(p)
+
+        # date_filed
+        parsed_df = _parse_date_any(df)
+        self.date_filed = parsed_df if parsed_df else "Unknown"
+
 class MainService:
     """Main service that orchestrates the entire SEC filing parsing process"""
     
@@ -17,6 +128,12 @@ class MainService:
         self.stock_service = StockService()
         self.filing_service = FilingService()
         self.upload_service = UploadService()
+
+    def _as_statement(self, obj: Any):
+        """Return an object with a .periods list and .date_filed attr."""
+        if hasattr(obj, "periods"):
+            return obj  # already modern FinancialStatement
+        return _LegacyStatementAdapter(obj)  # wrap legacy into statement-like
     
     def process_company_filing(self, ticker: str, target_year: int) -> Dict[str, Any]:
         """Process a company's filing for a specific year"""
@@ -108,9 +225,13 @@ class MainService:
                 logger.error(f"Missing financial statements for {ticker}")
                 return None, None, None, None
             
-            income_data = self._convert_to_legacy_format(income, target_year)
-            balance_data = self._convert_to_legacy_format(balance, target_year)
-            cash_data = self._convert_to_legacy_format(cash, target_year)
+            income_stmt  = self._as_statement(income)
+            balance_stmt = self._as_statement(balance)
+            cash_stmt    = self._as_statement(cash)
+            
+            income_data = self._convert_to_legacy_format(income_stmt, target_year)
+            balance_data = self._convert_to_legacy_format(balance_stmt, target_year)
+            cash_data = self._convert_to_legacy_format(cash_stmt, target_year)
             
             if income_data and balance_data and cash_data:
                 # Extract report_year from the first period
