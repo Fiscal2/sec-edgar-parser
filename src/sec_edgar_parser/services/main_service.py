@@ -108,16 +108,23 @@ class MainService:
                 logger.error(f"Missing financial statements for {ticker}")
                 return None, None, None, None
             
-            income_data = self._convert_old_financial_report(income, target_year)
-            balance_data = self._convert_old_financial_report(balance, target_year)
-            cash_data = self._convert_old_financial_report(cash, target_year)
+            income_data = self._convert_to_legacy_format(income, target_year)
+            balance_data = self._convert_to_legacy_format(balance, target_year)
+            cash_data = self._convert_to_legacy_format(cash, target_year)
             
             if income_data and balance_data and cash_data:
-                report_year = max(
-                    income_data.get('report_year', target_year),
-                    balance_data.get('report_year', target_year),
-                    cash_data.get('report_year', target_year)
-                )
+                # Extract report_year from the first period
+                report_year = target_year
+                if income_data and len(income_data) > 0:
+                    first_period = income_data[0]
+                    if 'date' in first_period:
+                        try:
+                            # Parse DD-MM-YYYY format to get year
+                            date_parts = first_period['date'].split('-')
+                            if len(date_parts) == 3:
+                                report_year = int(date_parts[2])
+                        except (ValueError, IndexError):
+                            report_year = target_year
                 
                 return income_data, balance_data, cash_data, report_year
             
@@ -130,10 +137,17 @@ class MainService:
     
     def _extract_total_revenue(self, income_data: Dict[str, Any], target_year: int) -> Optional[float]:
         """Extract total revenue from income statement data for a specific year"""
-        if not income_data or 'reports' not in income_data:
+        if not income_data:
             return None
             
-        reports = income_data.get('reports', [])
+        # Handle both new array format and old dict format
+        if isinstance(income_data, list):
+            reports = income_data
+        elif isinstance(income_data, dict) and 'reports' in income_data:
+            reports = income_data.get('reports', [])
+        else:
+            return None
+            
         if not reports:
             return None
             
@@ -326,8 +340,11 @@ class MainService:
         filtered_periods = []
         for period in statement.periods:
             if period.date.year == target_year:
+                # Format date as DD-MM-YYYY to match expected structure
+                date_str = period.date.strftime('%d-%m-%Y')
+                
                 legacy_period = {
-                    'date': period.date.isoformat(),  # Convert datetime to ISO string
+                    'date': date_str,
                     'months': period.months,
                     'map': {}
                 }
@@ -343,10 +360,9 @@ class MainService:
         if not filtered_periods:
             return None
         
-        return {
-            'date_filed': statement.date_filed.isoformat(),  # Convert datetime to ISO string
-            'reports': filtered_periods,
-        }
+        # Return the structure that matches your exported format
+        # The uploader service expects this to be JSON serializable
+        return filtered_periods
     
     def process_multiple_companies(self, tickers: List[str], years: List[int]) -> Dict[str, Any]:
         """

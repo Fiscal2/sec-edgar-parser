@@ -231,10 +231,12 @@ class TestMainService:
         result = service._convert_to_legacy_format(mock_statement, 2023)
         
         assert result is not None
-        assert result['company'] == 'AAPL'
-        assert len(result['reports']) == 1
-        assert result['reports'][0]['map']['revenue']['label'] == 'Revenue'
-        assert result['reports'][0]['map']['revenue']['value'] == 1000000
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]['date'] == '31-12-2023'
+        assert result[0]['months'] == 12
+        assert result[0]['map']['revenue']['label'] == 'Revenue'
+        assert result[0]['map']['revenue']['value'] == 1000000
 
 
 class TestRunnerService:
